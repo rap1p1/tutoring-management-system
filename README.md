@@ -1,13 +1,13 @@
-# Tutoring Class Management System (Hệ thống quản lý lớp dạy kèm)
+# Hệ thống quản lý lớp dạy kèm
 
 ## Giới thiệu
 Đây là hệ thống phần mềm quản lý toàn diện các lớp dạy kèm tại một trung tâm gia sư. Hệ thống bao gồm 3 phân hệ chính được phân quyền rõ rệt dành cho: **Học viên**, **Gia sư**, và **Nhân viên quản lý (Admin)**. Hệ thống giúp số hóa và tối ưu toàn bộ quy trình từ khâu tiếp nhận yêu cầu học, tuyển chọn gia sư, quản lý điểm danh, cho đến theo dõi tài chính và xử lý các sự cố khẩn cấp.
 
 ---
 
-## 🚀 Các Tính Năng Nổi Bật
+##  Các Tính Năng Nổi Bật
 
-### 👨‍🎓 Phân hệ Học Viên (Student)
+###  Phân hệ Học Viên (Student)
 - Gửi yêu cầu tìm gia sư với chi tiết (Môn học, cấp độ, thời gian, yêu cầu trình độ GS).
 - Theo dõi trạng thái tìm gia sư (Chờ ghép / Đã ghép).
 - Quản lý thông tin lớp học đang tham gia và học phí mỗi buổi.
@@ -15,7 +15,7 @@
 - Gửi báo cáo vắng mặt 1 buổi (Có cơ chế đánh dấu tình huống khẩn cấp bất khả kháng nếu sát giờ <24h).
 - Gửi yêu cầu đổi gia sư hoặc xin ngừng học.
 
-### 👨‍🏫 Phân hệ Gia Sư (Tutor)
+###  Phân hệ Gia Sư (Tutor)
 - Tạo và nộp hồ sơ xin làm gia sư (Cập nhật CCCD, bằng cấp, chuyên ngành, khu vực dạy).
 - Theo dõi trạng thái duyệt hồ sơ từ trung tâm.
 - Xem danh sách và thông tin chi tiết của các lớp đang được phân công giảng dạy.
@@ -23,7 +23,7 @@
 - Báo vắng mặt 1 buổi khẩn cấp (Hỗ trợ tình huống bất khả kháng <24h).
 - Yêu cầu xin nghỉ dạy (Bỏ lớp) kèm theo lý do.
 
-### 🛡️ Phân hệ Quản Trị Viên (Admin)
+###  Phân hệ Quản Trị Viên (Admin)
 - **Tổng quan (Dashboard):** Thống kê số lớp đang hoạt động, doanh thu, hồ sơ chờ duyệt, yêu cầu chờ ghép.
 - **Quản lý Gia sư:** Xem xét và phê duyệt / từ chối hồ sơ đăng ký của gia sư mới.
 - **Quản lý Lớp học:** Ghép cặp gia sư cho yêu cầu của học viên và khởi tạo lớp học mới. Cập nhật trạng thái và kết thúc lớp vĩnh viễn.
@@ -32,14 +32,14 @@
   - Phê duyệt thanh toán hoa hồng cho Gia sư.
 - **Quản lý Hỗ trợ:** Nắm bắt lịch sử báo nghỉ từng buổi (nhận diện các ca khẩn cấp). Giải quyết yêu cầu đổi/nghỉ ngang của hai bên.
 
-### 🌟 Tính Năng Nâng Cao (Advanced Features)
+###  Tính Năng Nâng Cao (Advanced Features)
 - **Biểu Đồ Thống Kê (Charts):** Tích hợp biểu đồ cột trực quan thống kê doanh thu theo từng tháng bằng thư viện `Recharts`.
 - **Xuất Báo Cáo Excel (Export XLSX):** Hỗ trợ xuất dữ liệu Danh Sách Lớp và Khoản Thu Học Phí ra file `.xlsx` chỉ với một cú click chuột.
 - **Gửi Email Tự Động (Email Automations):** Tự động gửi Email thông báo chúc mừng cho Gia sư ngay khi hồ sơ của họ được duyệt (Sử dụng `Nodemailer` và `Ethereal`).
 
 ---
 
-## 🛠️ Công Nghệ Sử Dụng
+##  Công Nghệ Sử Dụng
 - **Giao diện (Frontend):** React.js, Vite, Vanilla CSS (Thiết kế theo xu hướng Glassmorphism hiện đại).
 - **Máy chủ (Backend):** Node.js, Express.js.
 - **Cơ sở dữ liệu (Database):** PostgreSQL.
@@ -47,7 +47,7 @@
 
 ---
 
-## 📂 Cấu Trúc Thư Mục (Project Structure)
+##  Cấu Trúc Thư Mục (Project Structure)
 ```text
 Gia_Su/
 ├── node_modules/       # Thư mục chứa các thư viện (Sẽ tự động tải khi chạy npm install)
@@ -71,7 +71,7 @@ Gia_Su/
 
 ---
 
-## ⚙️ Hướng Dẫn Cài Đặt (Local Environment)
+##  Hướng Dẫn Cài Đặt (Local Environment)
 
 ### 1. Yêu cầu hệ thống
 - [Node.js](https://nodejs.org/) (Khuyến nghị phiên bản 16 trở lên)
@@ -117,7 +117,4 @@ Gia_Su/
    ```bash
    npm run dev
    ```
-   *(Truy cập vào ứng dụng qua địa chỉ http://localhost:5173 trên trình duyệt)*
-
----
-*Dự án được xây dựng cho mục đích quản lý trung tâm gia sư, tập trung vào nghiệp vụ thực tế và tối ưu hóa trải nghiệm quản trị hệ thống.*
+   *(Truy cập vào ứng dụng qua địa chỉ http://localhost:5173 trên trình duyệt)* 
