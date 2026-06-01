@@ -225,7 +225,8 @@ function StudentDashboard() {
         <div className="grid-col-8">
           <div className="glass-card mb-4">
             <h3>Hồ Sơ Cá Nhân</h3>
-            <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Học Viên (ID)</strong> {profile.mahv ? 'HV' + profile.mahv.toString().padStart(6, '0') : ''}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Họ và tên</strong> {profile.hoten}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Ngày sinh</strong> {new Date(profile.ngaysinh).toLocaleDateString('vi-VN')}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Số điện thoại</strong> {profile.sdt}</div>

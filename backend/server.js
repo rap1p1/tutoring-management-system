@@ -18,9 +18,10 @@ const pool = new Pool({
 });
 
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'secret',
   resave: false,
@@ -48,7 +49,7 @@ function requireRole(...roles) {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const result = await pool.query('SELECT * FROM TAIKHOAN WHERE TenDangNhap = $1', [username]);
+    const result = await pool.query('SELECT * FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (result.rows.length === 0) return res.json({ success: false, message: 'Sai tên đăng nhập hoặc mật khẩu' });
     const tk = result.rows[0];
     if (tk.trangthai === 'Khoa') return res.json({ success: false, message: 'Tài khoản đã bị khóa' });
@@ -71,7 +72,7 @@ app.post('/api/auth/register', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     if (ngaysinh >= today) return res.json({ success: false, message: 'Ngày sinh phải nhỏ hơn ngày hiện tại' });
 
-    const exists = await pool.query('SELECT MaTK FROM TAIKHOAN WHERE TenDangNhap = $1', [username]);
+    const exists = await pool.query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (exists.rows.length > 0) return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại' });
     
     const hash = await bcrypt.hash(password, 10);
@@ -79,12 +80,12 @@ app.post('/api/auth/register', async (req, res) => {
     try {
       await client.query('BEGIN');
       const tkResult = await client.query(
-        "INSERT INTO TAIKHOAN (TenDangNhap, MatKhau, VaiTro, Email) VALUES ($1, $2, 'HV', $3) RETURNING MaTK",
+        "INSERT INTO taikhoan (tendangnhap, matkhau, vaitro, email) VALUES ($1, $2, 'HV', $3) RETURNING matk",
         [username, hash, email || null]
       );
       const matk = tkResult.rows[0].matk;
       await client.query(
-        "INSERT INTO HOCVIEN (MaTK, HoTen, NgaySinh, SDT, Email) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO hocvien (matk, hoten, ngaysinh, sdt, email) VALUES ($1, $2, $3, $4, $5)",
         [matk, hoten, ngaysinh, sdt, email || null]
       );
       await client.query('COMMIT');
@@ -106,7 +107,7 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 app.get('/api/auth/check-username', async (req, res) => {
   try {
     const { username } = req.query;
-    const exists = await pool.query('SELECT MaTK FROM TAIKHOAN WHERE TenDangNhap = $1', [username]);
+    const exists = await pool.query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (exists.rows.length > 0) {
       res.json({ success: true, exists: true });
     } else {
@@ -137,27 +138,27 @@ app.locals.bcrypt = bcrypt;
 // ============================================================
 async function seedData() {
   try {
-    const check = await pool.query("SELECT COUNT(*) FROM TAIKHOAN");
+    const check = await pool.query("SELECT COUNT(*) FROM taikhoan");
     if (parseInt(check.rows[0].count) > 0) return;
     const hash = await bcrypt.hash('admin123', 10);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       // SA
-      const sa = await client.query("INSERT INTO TAIKHOAN(TenDangNhap,MatKhau,VaiTro) VALUES('admin','"+hash+"','SA') RETURNING MaTK");
-      await client.query("INSERT INTO NHANVIEN(MaTK,HoTen,SDT,ChucVu,NgayVaoLam) VALUES($1,'Quản trị viên','0900000001','SA','2024-01-01')",[sa.rows[0].matk]);
+      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin','"+hash+"','SA') RETURNING matk");
+      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Quản trị viên','0900000001','SA','2024-01-01')",[sa.rows[0].matk]);
       // BGD
-      const bgd = await client.query("INSERT INTO TAIKHOAN(TenDangNhap,MatKhau,VaiTro) VALUES('giamdoc','"+hash+"','BGD') RETURNING MaTK");
-      await client.query("INSERT INTO NHANVIEN(MaTK,HoTen,SDT,ChucVu,NgayVaoLam) VALUES($1,'Giám đốc','0900000002','Giám đốc','2024-01-01')",[bgd.rows[0].matk]);
+      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc','"+hash+"','BGD') RETURNING matk");
+      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Giám đốc','0900000002','Giám đốc','2024-01-01')",[bgd.rows[0].matk]);
       // NVQL
-      const nv = await client.query("INSERT INTO TAIKHOAN(TenDangNhap,MatKhau,VaiTro) VALUES('nhanvien','"+hash+"','NVQL') RETURNING MaTK");
-      await client.query("INSERT INTO NHANVIEN(MaTK,HoTen,SDT,ChucVu,NgayVaoLam) VALUES($1,'Nhân viên QL','0900000003','NVQL','2024-01-01')",[nv.rows[0].matk]);
+      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien','"+hash+"','NVQL') RETURNING matk");
+      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Nhân viên QL','0900000003','NVQL','2024-01-01')",[nv.rows[0].matk]);
       // HV
-      const hv = await client.query("INSERT INTO TAIKHOAN(TenDangNhap,MatKhau,VaiTro) VALUES('hocvien1','"+hash+"','HV') RETURNING MaTK");
-      await client.query("INSERT INTO HOCVIEN(MaTK,HoTen,SDT) VALUES($1,'Học viên Mẫu','0900000004')",[hv.rows[0].matk]);
+      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1','"+hash+"','HV') RETURNING matk");
+      await client.query("INSERT INTO hocvien(matk,hoten,sdt) VALUES($1,'Học viên Mẫu','0900000004')",[hv.rows[0].matk]);
       // GS
-      const gs = await client.query("INSERT INTO TAIKHOAN(TenDangNhap,MatKhau,VaiTro) VALUES('giasu1','"+hash+"','GS') RETURNING MaTK");
-      await client.query("INSERT INTO GIASU(MaTK,HoTen,NgaySinh,GioiTinh,CCCD,SDT,TrinhDoHocVan,ChuyenNganh,KinhNghiem,KhuVuc,HocPhiMongMuon,TrangThaiHoSo) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')",[gs.rows[0].matk]);
+      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1','"+hash+"','GS') RETURNING matk");
+      await client.query("INSERT INTO giasu(matk,hoten,ngaysinh,gioitinh,cccd,sdt,trinhdohocvan,chuyennganh,kinhnghiem,khuvuc,hocphimongmuon,trangthaihoso) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')",[gs.rows[0].matk]);
       await client.query('COMMIT');
       console.log('Seed data thành công. Tài khoản mặc định: admin/admin123, hocvien1/admin123, giasu1/admin123, nhanvien/admin123, giamdoc/admin123');
     } catch(e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }

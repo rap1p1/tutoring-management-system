@@ -67,7 +67,11 @@ CREATE TABLE GIASU (
   TrangThaiHoSo     VARCHAR(15)    NOT NULL DEFAULT 'ChoDuyet' CHECK (TrangThaiHoSo IN ('ChoDuyet','DaDuyet','TuChoi')),
   NgayDangKy        TIMESTAMP      NOT NULL DEFAULT NOW(),
   NgayDuyet         TIMESTAMP,
-  MaNV_Duyet        INT
+  MaNV_Duyet        INT,
+  AnhCCCD           VARCHAR(255),
+  AnhBangCap        VARCHAR(255),
+  AnhTheSinhVien    VARCHAR(255),
+  AnhDaiDien        VARCHAR(255)
 );
 CREATE INDEX idx_gs_trangthai ON GIASU(TrangThaiHoSo);
 CREATE INDEX idx_gs_khuvuc    ON GIASU(KhuVuc);

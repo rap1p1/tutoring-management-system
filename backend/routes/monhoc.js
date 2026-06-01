@@ -6,7 +6,7 @@ function getPool(req) { return req.app.locals.pool; }
 // Danh sách môn học (public)
 router.get('/', async (req, res) => {
   try {
-    const result = await getPool(req).query("SELECT * FROM MONHOC WHERE TrangThai='HoatDong' ORDER BY TenMH");
+    const result = await getPool(req).query("SELECT * FROM monhoc WHERE trangthai='HoatDong' ORDER BY tenmh");
     res.json({ success: true, data: result.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
     const { tenmh, caphoc, mota } = req.body;
     if (!tenmh) return res.json({ success: false, message: 'Thiếu tên môn học' });
     const r = await getPool(req).query(
-      "INSERT INTO MONHOC(TenMH,CapHoc,MoTa) VALUES($1,$2,$3) RETURNING *",
+      "INSERT INTO monhoc(tenmh,caphoc,mota) VALUES($1,$2,$3) RETURNING *",
       [tenmh, caphoc||null, mota||null]
     );
     res.json({ success: true, data: r.rows[0] });

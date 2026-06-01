@@ -22,6 +22,14 @@ function AdminDashboard() {
   const [supportRequests, setSupportRequests] = useState([]);
   const [absences, setAbsences] = useState([]);
   const [revenueData, setRevenueData] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Class detail state
+  const [showClassDetailModal, setShowClassDetailModal] = useState(false);
+  const [classDetail, setClassDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Modals state
   const [showClassModal, setShowClassModal] = useState(false);
@@ -34,7 +42,7 @@ function AdminDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statRes, tutRes, reqRes, classRes, tuitRes, commRes, suppRes, absRes, chartRes] = await Promise.all([
+      const [statRes, tutRes, reqRes, classRes, tuitRes, commRes, suppRes, absRes, chartRes, accRes, profRes, meRes] = await Promise.all([
         fetch('/api/nhanvien/stats').then(r => r.json()),
         fetch('/api/nhanvien/giasu/pending').then(r => r.json()),
         fetch('/api/nhanvien/yeucau').then(r => r.json()),
@@ -43,7 +51,10 @@ function AdminDashboard() {
         fetch('/api/nhanvien/hoahong').then(r => r.json()),
         fetch('/api/nhanvien/yeucaudoi').then(r => r.json()),
         fetch('/api/nhanvien/baonghi').then(r => r.json()),
-        fetch('/api/nhanvien/revenue-chart').then(r => r.json())
+        fetch('/api/nhanvien/revenue-chart').then(r => r.json()),
+        fetch('/api/nhanvien/taikhoan').then(r => r.json()),
+        fetch('/api/nhanvien/me').then(r => r.json()),
+        fetch('/api/auth/me').then(r => r.json())
       ]);
 
       if (!statRes.success) {
@@ -60,6 +71,9 @@ function AdminDashboard() {
       setSupportRequests(suppRes.data || []);
       setAbsences(absRes.data || []);
       setRevenueData(chartRes.data || []);
+      setAccounts(accRes.data || []);
+      setProfile(profRes.data || null);
+      setCurrentUser(meRes.data || null);
     } catch (e) {
       console.error(e);
       setGlobalError('Lỗi tải dữ liệu bảng điều khiển.');
@@ -125,13 +139,18 @@ function AdminDashboard() {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
     
+    if (!data.mags || data.mags.trim() === '') {
+      showMsg('error', 'Vui lòng điền mã gia sư!');
+      return;
+    }
+    
     try {
       const res = await fetch('/api/nhanvien/lop/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mayc: selectedRequest.mayc,
-          mags: data.mags || null,
+          mags: data.mags,
           ngaybatdau: data.ngaybatdau,
           hocphimoibuoi: data.hocphi,
           tylehh: data.tylehh
@@ -239,6 +258,60 @@ function AdminDashboard() {
     }
   };
 
+  const handleToggleLock = async (id, currentStatus) => {
+    const actionName = currentStatus === 'Khoa' ? 'mở khóa' : 'khóa';
+    const result = await Swal.fire({
+      title: 'Xác nhận',
+      text: `Bạn có chắc chắn muốn ${actionName} tài khoản này?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: currentStatus === 'Khoa' ? '#10b981' : '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/nhanvien/taikhoan/${id}/toggle-lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const json = await res.json();
+      if (json.success) {
+        showMsg('success', json.message);
+        fetchData();
+      } else {
+        showMsg('error', json.message);
+      }
+    } catch (e) {
+      showMsg('error', 'Lỗi kết nối.');
+    }
+  };
+
+  const handleOpenClassDetail = async (id) => {
+    try {
+      setLoadingDetail(true);
+      setShowClassDetailModal(true);
+      const res = await fetch(`/api/nhanvien/lop/${id}/detail`);
+      const json = await res.json();
+      if (json.success) {
+        setClassDetail(json.data);
+      } else {
+        showMsg('error', json.message);
+        setShowClassDetailModal(false);
+      }
+    } catch (e) {
+      showMsg('error', 'Lỗi kết nối.');
+      setShowClassDetailModal(false);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   const exportToExcel = (data, filename) => {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -282,6 +355,18 @@ function AdminDashboard() {
           <p>Quản lý yêu cầu, phân công gia sư và duyệt hồ sơ</p>
         </div>
       </div>
+
+      {profile && (
+        <div className="glass-card mb-4" style={{ padding: '20px' }}>
+          <h3 style={{ marginBottom: '15px' }}>Thông Tin Cá Nhân Nhân Viên</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
+            <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Nhân Viên (ID)</strong> {profile.manv ? 'NV' + profile.manv.toString().padStart(6, '0') : ''}</div>
+            <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Họ và tên</strong> {profile.hoten}</div>
+            <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Chức vụ</strong> {profile.chucvu}</div>
+            <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Số điện thoại</strong> {profile.sdt}</div>
+          </div>
+        </div>
+      )}
 
       {globalError && (
         <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -359,6 +444,9 @@ function AdminDashboard() {
           <button className={`admin-tab ${activeTab === 'classes' ? 'active' : ''}`} onClick={() => setActiveTab('classes')}>Danh Sách Lớp & Học Phí</button>
           <button className={`admin-tab ${activeTab === 'finances' ? 'active' : ''}`} onClick={() => setActiveTab('finances')}>Tài Chính & Hoa Hồng</button>
           <button className={`admin-tab ${activeTab === 'support' ? 'active' : ''}`} onClick={() => setActiveTab('support')}>Yêu Cầu Đổi/Nghỉ</button>
+          {currentUser && (currentUser.vaitro === 'SA' || currentUser.vaitro === 'BGD') && (
+            <button className={`admin-tab ${activeTab === 'accounts' ? 'active' : ''}`} onClick={() => setActiveTab('accounts')}>Quản Lý Tài Khoản</button>
+          )}
         </div>
 
         <div className="card-body">
@@ -370,6 +458,7 @@ function AdminDashboard() {
                     <th>Gia sư</th>
                     <th>Chuyên ngành</th>
                     <th>CCCD/SĐT</th>
+                    <th>Minh chứng</th>
                     <th>Học phí mong muốn</th>
                     <th>Khu vực dạy</th>
                     <th>Hành động</th>
@@ -377,17 +466,48 @@ function AdminDashboard() {
                 </thead>
                 <tbody>
                   {pendingTutors.length === 0 ? (
-                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có hồ sơ chờ duyệt</td></tr>
+                    <tr><td colSpan="7" style={{ textAlign: 'center' }}>Không có hồ sơ chờ duyệt</td></tr>
                   ) : pendingTutors.map(t => (
                     <tr key={t.mags}>
-                      <td><strong>{t.hoten}</strong><br/>{t.gioitinh} - {new Date(t.ngaysinh).toLocaleDateString()}</td>
-                      <td>{t.trinhdo}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{t.chuyennganh}</span></td>
-                      <td>{t.cccd}<br/>{t.sdt}</td>
-                      <td>{parseInt(t.hocphimongmuon).toLocaleString()}đ</td>
-                      <td>{t.khuvucday}</td>
                       <td>
-                        <button className="btn btn-xs btn-teal" onClick={() => handleApproveTutor(t.mags, 'DaDuyet')} style={{marginRight:'5px'}}><Check size={14}/></button>
-                        <button className="btn btn-xs btn-secondary" onClick={() => handleApproveTutor(t.mags, 'TuChoi')}><X size={14}/></button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {t.anhdaidien ? (
+                            <img src={t.anhdaidien} alt="avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-primary)' }} />
+                          ) : (
+                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#94a3b8' }}>N/A</div>
+                          )}
+                          <div>
+                            <strong>{t.hoten}</strong><br/>
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>{t.gioitinh} - {new Date(t.ngaysinh).toLocaleDateString('vi-VN')}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{t.trinhdo || t.trinhdohocvan}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{t.chuyennganh}</span></td>
+                      <td>{t.cccd}<br/>{t.sdt}</td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
+                          {t.anhcccd ? (
+                            <a href={t.anhcccd} target="_blank" rel="noreferrer" style={{ color: 'var(--color-teal)', textDecoration: 'underline' }}>CCCD</a>
+                          ) : (
+                            <span style={{ color: '#ef4444' }}>Không có CCCD</span>
+                          )}
+                          {t.anhbangcap && (
+                            <a href={t.anhbangcap} target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>Bằng cấp</a>
+                          )}
+                          {t.anhthesinhvien && (
+                            <a href={t.anhthesinhvien} target="_blank" rel="noreferrer" style={{ color: 'var(--color-info)', textDecoration: 'underline' }}>Thẻ SV</a>
+                          )}
+                        </div>
+                      </td>
+                      <td>{parseInt(t.hocphimongmuon).toLocaleString()}đ</td>
+                      <td>{t.khuvucday || t.khuvuc}</td>
+                      <td>
+                        {currentUser && currentUser.vaitro !== 'BGD' && (
+                          <>
+                            <button className="btn btn-xs btn-teal" onClick={() => handleApproveTutor(t.mags, 'DaDuyet')} style={{marginRight:'5px'}}><Check size={14}/></button>
+                            <button className="btn btn-xs btn-secondary" onClick={() => handleApproveTutor(t.mags, 'TuChoi')}><X size={14}/></button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -424,7 +544,7 @@ function AdminDashboard() {
                         </span>
                       </td>
                       <td>
-                        {r.trangthai === 'ChoGhep' && (
+                        {r.trangthai === 'ChoGhep' && currentUser && currentUser.vaitro !== 'BGD' && (
                           <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassModal(r)}>
                             Tạo Lớp & Ghép GS
                           </button>
@@ -474,7 +594,10 @@ function AdminDashboard() {
                         </span>
                       </td>
                       <td>
-                        {c.trangthai !== 'KetThuc' && c.trangthai !== 'Huy' && (
+                        <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassDetail(c.malop)} style={{marginRight:'5px'}}>
+                          Chi tiết
+                        </button>
+                        {c.trangthai !== 'KetThuc' && c.trangthai !== 'Huy' && currentUser && currentUser.vaitro !== 'BGD' && (
                           <button className="btn btn-xs btn-rose" onClick={() => handleEndClass(c.malop)}>
                             Kết thúc
                           </button>
@@ -522,7 +645,7 @@ function AdminDashboard() {
                             </span>
                           </td>
                           <td>
-                            {t.trangthai !== 'DaNop' && (
+                            {t.trangthai !== 'DaNop' && currentUser && currentUser.vaitro !== 'BGD' && (
                               <button className="btn btn-xs btn-teal" onClick={() => handleConfirmTuition(t.mahp)}>
                                 Duyệt Nộp
                               </button>
@@ -562,7 +685,7 @@ function AdminDashboard() {
                             </span>
                           </td>
                           <td>
-                            {c.trangthai !== 'DaTT' && (
+                            {c.trangthai !== 'DaTT' && currentUser && currentUser.vaitro !== 'BGD' && (
                               <button className="btn btn-xs btn-primary" onClick={() => handleConfirmCommission(c.mahh)}>
                                 Duyệt TT
                               </button>
@@ -613,7 +736,7 @@ function AdminDashboard() {
                             </span>
                           </td>
                           <td>
-                            {s.trangthai === 'ChoXuLy' && (
+                            {s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro !== 'BGD' && (
                               <button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg)}>
                                 Đánh dấu xử lý
                               </button>
@@ -666,6 +789,56 @@ function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {activeTab === 'accounts' && (
+            <div className="table-responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Họ Tên</th>
+                    <th>Tên Đăng Nhập</th>
+                    <th>Email</th>
+                    <th>Vai Trò</th>
+                    <th>Trạng Thái</th>
+                    <th>Hành Động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts.length === 0 ? (
+                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có tài khoản nào</td></tr>
+                  ) : accounts.map(acc => (
+                    <tr key={acc.matk}>
+                      <td><strong>{acc.hoten || 'Chưa cập nhật'}</strong></td>
+                      <td>{acc.tendangnhap}</td>
+                      <td>{acc.email || 'Không có'}</td>
+                      <td>
+                        <span className="status-badge" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff' }}>
+                          {acc.vaitro === 'HV' ? 'Học viên' :
+                           acc.vaitro === 'GS' ? 'Gia sư' :
+                           acc.vaitro === 'NVQL' ? 'Nhân viên QL' :
+                           acc.vaitro === 'BGD' ? 'Giám đốc' :
+                           acc.vaitro === 'SA' ? 'System Admin' : acc.vaitro}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${acc.trangthai === 'HoatDong' ? 'status-active' : 'status-disabled'}`}>
+                          {acc.trangthai === 'HoatDong' ? 'Hoạt động' : 'Đã khóa'}
+                        </span>
+                      </td>
+                      <td>
+                        <button 
+                          className={`btn btn-xs ${acc.trangthai === 'Khoa' ? 'btn-teal' : 'btn-rose'}`} 
+                          onClick={() => handleToggleLock(acc.matk, acc.trangthai)}
+                        >
+                          {acc.trangthai === 'Khoa' ? 'Mở khóa' : 'Khóa'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -683,8 +856,8 @@ function AdminDashboard() {
                 <input type="text" value={selectedRequest.mayc} disabled style={{background: 'rgba(255,255,255,0.05)'}} />
               </div>
               <div className="form-group">
-                <label>Mã Gia Sư (để trống nếu chưa có)</label>
-                <input type="number" name="mags" placeholder="Ví dụ: 1" />
+                <label>Mã Gia Sư *</label>
+                <input type="number" name="mags" required placeholder="Ví dụ: 1" />
               </div>
               <div className="form-group">
                 <label>Ngày bắt đầu *</label>
@@ -700,6 +873,94 @@ function AdminDashboard() {
               </div>
               <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '15px' }}>Tạo Lớp</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Class Detail Modal */}
+      {showClassDetailModal && (
+        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '700px', width: '90%' }}>
+            <div className="modal-header">
+              <h3>Chi Tiết Lớp Học #{classDetail?.info?.malop}</h3>
+              <span className="close-btn" onClick={() => setShowClassDetailModal(false)}>&times;</span>
+            </div>
+            
+            {loadingDetail ? (
+              <div style={{ padding: '30px', textAlign: 'center' }}>Đang tải thông tin chi tiết...</div>
+            ) : classDetail ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '5px' }}>
+                
+                {/* Row 1: General Class Info */}
+                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
+                  <h4 style={{ color: '#fff', marginBottom: '10px' }}>Thông Tin Lớp Học</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '14px' }}>
+                    <div><strong>Môn học:</strong> {classDetail.info.tenmh} ({classDetail.info.caplop})</div>
+                    <div><strong>Trạng thái lớp:</strong> <span className={`status-badge ${classDetail.info.classtrangthai === 'DangDay' ? 'status-active' : (classDetail.info.classtrangthai === 'KetThuc' ? 'status-disabled' : 'status-pending')}`}>{classDetail.info.classtrangthai}</span></div>
+                    <div><strong>Học phí:</strong> {parseInt(classDetail.info.hocphimoibuoi).toLocaleString()}đ/buổi</div>
+                    <div><strong>Tỷ lệ hoa hồng GS:</strong> {classDetail.info.tylehhgiasu}%</div>
+                    <div><strong>Ngày bắt đầu:</strong> {classDetail.info.ngaybatdau ? new Date(classDetail.info.ngaybatdau).toLocaleDateString('vi-VN') : 'N/A'}</div>
+                    <div><strong>Hình thức học:</strong> {classDetail.info.classhinhthuc === 'Online' ? 'Online' : 'Trực tiếp tại nhà'}</div>
+                    <div style={{ gridColumn: 'span 2' }}><strong>Địa điểm:</strong> {classDetail.info.classdiadiem || 'N/A'}</div>
+                  </div>
+                </div>
+
+                {/* Row 2: Student & Tutor Columns */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
+                  {/* Student Info */}
+                  <div>
+                    <h4 style={{ color: '#2dd4bf', marginBottom: '10px' }}>Thông Tin Học Viên</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                      <div><strong>Mã Học Viên:</strong> HV{classDetail.info.mahv?.toString().padStart(6, '0')}</div>
+                      <div><strong>Họ tên:</strong> {classDetail.info.studentname}</div>
+                      <div><strong>Số điện thoại:</strong> {classDetail.info.studentsdt}</div>
+                      <div><strong>Email:</strong> {classDetail.info.studentemail || 'Không có'}</div>
+                      <div><strong>Địa chỉ:</strong> {classDetail.info.studentdiachi || 'Không có'}</div>
+                    </div>
+                  </div>
+
+                  {/* Tutor Info */}
+                  <div>
+                    <h4 style={{ color: '#6366f1', marginBottom: '10px' }}>Thông Tin Gia Sư</h4>
+                    {classDetail.info.mags ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                        <div><strong>Mã Gia Sư:</strong> GS{classDetail.info.mags?.toString().padStart(6, '0')}</div>
+                        <div><strong>Họ tên:</strong> {classDetail.info.tutorname}</div>
+                        <div><strong>Số điện thoại:</strong> {classDetail.info.tutorsdt}</div>
+                        <div><strong>Email:</strong> {classDetail.info.tutoremail || 'Không có'}</div>
+                        <div><strong>Trình độ:</strong> {classDetail.info.tutortrinhdo} ({classDetail.info.tutorchuyennganh})</div>
+                      </div>
+                    ) : (
+                      <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>Chưa phân công gia sư</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 3: Session Progress */}
+                <div>
+                  <h4 style={{ color: '#f59e0b', marginBottom: '10px' }}>Tiến Độ Buổi Học</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', textAlign: 'center' }}>
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ display: 'block', fontSize: '20px', fontWeight: 'bold', color: '#10b981' }}>{classDetail.stats.count_daday}</span>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Đã dạy</span>
+                    </div>
+                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ display: 'block', fontSize: '20px', fontWeight: 'bold', color: '#ef4444' }}>
+                        {parseInt(classDetail.stats.count_hvvangcophep) + parseInt(classDetail.stats.count_hvvangkhongphep)}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Học viên vắng ({classDetail.stats.count_hvvangcophep} có phép)</span>
+                    </div>
+                    <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ display: 'block', fontSize: '20px', fontWeight: 'bold', color: '#f59e0b' }}>{classDetail.stats.count_gsnghi}</span>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Gia sư nghỉ</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            ) : (
+              <div style={{ padding: '30px', textAlign: 'center', color: '#ef4444' }}>Không tải được dữ liệu.</div>
+            )}
           </div>
         </div>
       )}
