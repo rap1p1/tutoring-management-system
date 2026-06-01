@@ -1,15 +1,44 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 
 function pool(req) { return req.app.locals.pool; }
 function auth(req) { return req.session.user; }
 
+function saveBase64Image(base64Str, prefix) {
+  if (!base64Str) return null;
+  const match = base64Str.match(/^data:image\/(\w+);base64,(.+)$/);
+  if (!match) return null;
+  
+  const ext = match[1];
+  const data = match[2];
+  const buffer = Buffer.from(data, 'base64');
+  
+  const filename = `${prefix}_${Date.now()}_${Math.round(Math.random() * 1e9)}.${ext}`;
+  const dirPath = path.join(__dirname, '../uploads');
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+  const filePath = path.join(dirPath, filename);
+  fs.writeFileSync(filePath, buffer);
+  
+  return `/uploads/${filename}`;
+}
+
 // Đăng ký tài khoản Gia Sư mới
 router.post('/register', async (req, res) => {
   try {
-    const { username, password, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon } = req.body;
+    const { username, password, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien } = req.body;
     if (!username || !password || !hoten || !ngaysinh || !gioitinh || !cccd || !sdt || !trinhdohocvan || !chuyennganh || !khuvuc || !hocphimongmuon) {
       return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
+    }
+
+    if (!anhcccd) {
+      return res.json({ success: false, message: 'Ảnh CCCD là minh chứng bắt buộc' });
+    }
+    if (!anhbangcap && !anhthesinhvien) {
+      return res.json({ success: false, message: 'Vui lòng cung cấp ít nhất Ảnh bằng tốt nghiệp hoặc Ảnh thẻ sinh viên để làm minh chứng' });
     }
 
     // Backend Validation
@@ -24,10 +53,10 @@ router.post('/register', async (req, res) => {
     const eighteenYearsAgo = new Date(todayObj.getFullYear() - 18, todayObj.getMonth(), todayObj.getDate()).toISOString().split('T')[0];
     if (ngaysinh > eighteenYearsAgo) return res.json({ success: false, message: 'Gia sư phải đủ 18 tuổi' });
 
-    const exists = await pool(req).query('SELECT MaTK FROM TAIKHOAN WHERE TenDangNhap = $1', [username]);
+    const exists = await pool(req).query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (exists.rows.length > 0) return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại' });
 
-    const cccdExists = await pool(req).query('SELECT MaGS FROM GIASU WHERE CCCD = $1', [cccd]);
+    const cccdExists = await pool(req).query('SELECT mags FROM giasu WHERE cccd = $1', [cccd]);
     if (cccdExists.rows.length > 0) return res.json({ success: false, message: 'Số CCCD đã được đăng ký' });
 
     const bcrypt = req.app.locals.bcrypt;
@@ -37,15 +66,20 @@ router.post('/register', async (req, res) => {
     try {
       await client.query('BEGIN');
       const tkResult = await client.query(
-        "INSERT INTO TAIKHOAN (TenDangNhap, MatKhau, VaiTro, Email) VALUES ($1, $2, 'GS', $3) RETURNING MaTK",
+        "INSERT INTO taikhoan (tendangnhap, matkhau, vaitro, email) VALUES ($1, $2, 'GS', $3) RETURNING matk",
         [username, hash, email || null]
       );
       const matk = tkResult.rows[0].matk;
 
+      const anhcccdPath = saveBase64Image(anhcccd, 'cccd');
+      const anhbangcapPath = saveBase64Image(anhbangcap, 'bangcap');
+      const anhthesinhvienPath = saveBase64Image(anhthesinhvien, 'thesv');
+      const anhdaidienPath = saveBase64Image(anhdaidien, 'avatar');
+
       await client.query(
-        `INSERT INTO GIASU (MaTK, HoTen, NgaySinh, GioiTinh, CCCD, SDT, Email, TrinhDoHocVan, ChuyenNganh, KinhNghiem, KhuVuc, HocPhiMongMuon) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-        [matk, hoten, ngaysinh, gioitinh, cccd, sdt, email || null, trinhdohocvan, chuyennganh, parseInt(kinhnghiem) || 0, khuvuc, parseInt(hocphimongmuon)]
+        `INSERT INTO giasu (matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [matk, hoten, ngaysinh, gioitinh, cccd, sdt, email || null, trinhdohocvan, chuyennganh, parseInt(kinhnghiem) || 0, khuvuc, parseInt(hocphimongmuon), anhcccdPath, anhbangcapPath, anhthesinhvienPath, anhdaidienPath]
       );
 
       await client.query('COMMIT');
@@ -66,7 +100,7 @@ router.post('/register', async (req, res) => {
 router.get('/me', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const r = await pool(req).query('SELECT * FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const r = await pool(req).query('SELECT * FROM giasu WHERE matk = $1', [auth(req).matk]);
     if (!r.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
     res.json({ success: true, data: r.rows[0] });
   } catch (e) { res.json({ success: false, message: e.message }); }
@@ -76,15 +110,15 @@ router.get('/me', async (req, res) => {
 router.get('/monhoc', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
     const mags = gsR.rows[0].mags;
 
     const r = await pool(req).query(
-      `SELECT gsm.*, mh.TenMH 
-       FROM GIASU_MONHOC gsm
-       JOIN MONHOC mh ON mh.MaMH = gsm.MaMH
-       WHERE gsm.MaGS = $1`, [mags]
+      `SELECT gsm.*, mh.tenmh 
+       FROM giasu_monhoc gsm
+       JOIN monhoc mh ON mh.mamh = gsm.mamh
+       WHERE gsm.mags = $1`, [mags]
     );
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
@@ -97,14 +131,14 @@ router.post('/monhoc', async (req, res) => {
     const { mamh, caplop, hocphidexuat, ghichu } = req.body;
     if (!mamh || !caplop) return res.json({ success: false, message: 'Thiếu môn học hoặc cấp lớp' });
 
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     const mags = gsR.rows[0].mags;
 
     await pool(req).query(
-      `INSERT INTO GIASU_MONHOC (MaGS, MaMH, CapLop, HocPhiDeXuat, GhiChu) 
+      `INSERT INTO giasu_monhoc (mags, mamh, caplop, hocphidexuat, ghichu) 
        VALUES ($1, $2, $3, $4, $5) 
-       ON CONFLICT (MaGS, MaMH, CapLop) 
-       DO UPDATE SET HocPhiDeXuat = EXCLUDED.HocPhiDeXuat, GhiChu = EXCLUDED.GhiChu`,
+       ON CONFLICT (mags, mamh, caplop) 
+       DO UPDATE SET hocphidexuat = EXCLUDED.hocphidexuat, ghichu = EXCLUDED.ghichu`,
       [mags, mamh, caplop, hocphidexuat || null, ghichu || null]
     );
     res.json({ success: true, message: 'Cập nhật môn dạy thành công' });
@@ -115,32 +149,57 @@ router.post('/monhoc', async (req, res) => {
 router.get('/lichranh', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
     const mags = gsR.rows[0].mags;
 
-    const r = await pool(req).query('SELECT * FROM LICHRANH_GIASU WHERE MaGS = $1 ORDER BY ThuTrongTuan, CaHoc', [mags]);
+    const r = await pool(req).query('SELECT * FROM lichranh_giasu WHERE mags = $1 ORDER BY thutrongtuan, cahoc', [mags]);
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
-// Thêm lịch rảnh
+// Thêm lịch rảnh (Hỗ trợ chọn nhiều)
 router.post('/lichranh', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
     const { thutrongtuan, cahoc, ghichu } = req.body;
     if (!thutrongtuan || !cahoc) return res.json({ success: false, message: 'Thiếu thông tin thứ hoặc ca học' });
 
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags, trangthaihoso FROM giasu WHERE matk = $1', [auth(req).matk]);
+    if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
+    if (gsR.rows[0].trangthaihoso !== 'DaDuyet') {
+      return res.json({ success: false, message: 'Hồ sơ của bạn chưa được duyệt, không thể thực hiện chức năng này.' });
+    }
     const mags = gsR.rows[0].mags;
 
-    await pool(req).query(
-      `INSERT INTO LICHRANH_GIASU (MaGS, ThuTrongTuan, CaHoc, TrangThai, GhiChu) 
-       VALUES ($1, $2, $3, 'Ranh', $4)
-       ON CONFLICT (MaGS, ThuTrongTuan, CaHoc) DO NOTHING`,
-      [mags, thutrongtuan, cahoc, ghichu || null]
-    );
-    res.json({ success: true, message: 'Thêm lịch rảnh thành công' });
+    const selectedThus = Array.isArray(thutrongtuan) ? thutrongtuan : [thutrongtuan];
+    const selectedCas = Array.isArray(cahoc) ? cahoc : [cahoc];
+
+    if (selectedThus.length === 0 || selectedCas.length === 0) {
+      return res.json({ success: false, message: 'Vui lòng chọn ít nhất một Thứ và một Ca học' });
+    }
+
+    const client = await pool(req).connect();
+    try {
+      await client.query('BEGIN');
+      for (const thu of selectedThus) {
+        for (const ca of selectedCas) {
+          await client.query(
+            `INSERT INTO lichranh_giasu (mags, thutrongtuan, cahoc, trangthai, ghichu) 
+             VALUES ($1, $2, $3, 'Ranh', $4)
+             ON CONFLICT (mags, thutrongtuan, cahoc) DO NOTHING`,
+            [mags, parseInt(thu), ca, ghichu || null]
+          );
+        }
+      }
+      await client.query('COMMIT');
+      res.json({ success: true, message: 'Đăng ký lịch rảnh thành công' });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
@@ -149,10 +208,10 @@ router.delete('/lichranh/:id', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
     const { id } = req.params;
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     const mags = gsR.rows[0].mags;
 
-    await pool(req).query('DELETE FROM LICHRANH_GIASU WHERE MaLich = $1 AND MaGS = $2', [id, mags]);
+    await pool(req).query('DELETE FROM lichranh_giasu WHERE malich = $1 AND mags = $2', [id, mags]);
     res.json({ success: true, message: 'Xóa lịch rảnh thành công' });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
@@ -161,18 +220,18 @@ router.delete('/lichranh/:id', async (req, res) => {
 router.get('/lop', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     if (!gsR.rows.length) return res.json({ success: true, data: [] });
     const mags = gsR.rows[0].mags;
 
     const r = await pool(req).query(
-      `SELECT l.*, mh.TenMH, hv.HoTen AS TenHocVien, yc.CapLop, yc.DiaChi, yc.ThoiGianMongMuon
-       FROM LOP l
-       JOIN YEUCAUHOCKEM yc ON yc.MaYC = l.MaYC
-       JOIN HOCVIEN hv ON hv.MaHV = yc.MaHV
-       JOIN MONHOC mh ON mh.MaMH = yc.MaMH
-       WHERE l.MaGS = $1
-       ORDER BY l.NgayTao DESC`, [mags]
+      `SELECT l.*, mh.tenmh, hv.hoten AS tenhocvien, yc.caplop, yc.diachi, yc.thoigianmongmuon
+       FROM lop l
+       JOIN yeucauhockem yc ON yc.mayc = l.mayc
+       JOIN hocvien hv ON hv.mahv = yc.mahv
+       JOIN monhoc mh ON mh.mamh = yc.mamh
+       WHERE l.mags = $1 AND l.trangthai NOT IN ('KetThuc', 'Huy')
+       ORDER BY l.ngaytao DESC`, [mags]
     );
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
@@ -182,17 +241,17 @@ router.get('/lop', async (req, res) => {
 router.get('/hoahong', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK = $1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     if (!gsR.rows.length) return res.json({ success: true, data: [] });
     const mags = gsR.rows[0].mags;
 
     const r = await pool(req).query(
-      `SELECT hh.*, mh.TenMH FROM HOAHONG hh
-       JOIN LOP l ON l.MaLop = hh.MaLop
-       JOIN YEUCAUHOCKEM yc ON yc.MaYC = l.MaYC
-       JOIN MONHOC mh ON mh.MaMH = yc.MaMH
-       WHERE hh.MaGS = $1
-       ORDER BY hh.KyTT_Tu DESC`, [mags]
+      `SELECT hh.*, mh.tenmh FROM hoahong hh
+       JOIN lop l ON l.malop = hh.malop
+       JOIN yeucauhockem yc ON yc.mayc = l.mayc
+       JOIN monhoc mh ON mh.mamh = yc.mamh
+       WHERE hh.mags = $1
+       ORDER BY hh.kytt_tu DESC`, [mags]
     );
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
@@ -205,21 +264,21 @@ router.post('/xinnghi', async (req, res) => {
     const { malop, lydo } = req.body;
     if (!malop || !lydo) return res.json({ success: false, message: 'Thiếu thông tin' });
     
-    const gsR = await pool(req).query('SELECT MaGS FROM GIASU WHERE MaTK=$1', [auth(req).matk]);
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk=$1', [auth(req).matk]);
     const mags = gsR.rows[0].mags;
     
     const lopCheck = await pool(req).query(`
-      SELECT l.MaLop, yc.MaHV 
-      FROM LOP l JOIN YEUCAUHOCKEM yc ON l.MaYC = yc.MaYC 
-      WHERE l.MaLop = $1 AND l.MaGS = $2
+      SELECT l.malop, yc.mahv 
+      FROM lop l JOIN yeucauhockem yc ON l.mayc = yc.mayc 
+      WHERE l.malop = $1 AND l.mags = $2
     `, [malop, mags]);
     
     if (!lopCheck.rows.length) return res.json({ success: false, message: 'Không tìm thấy lớp' });
     const mahv = lopCheck.rows[0].mahv;
     
-    // Lưu vào bảng YEUCAUDOIGIASU với ý nghĩa gia sư xin nghỉ (có thể admin sẽ gán GS khác hoặc kết thúc lớp)
+    // Lưu vào bảng yeucaudoigiasu với ý nghĩa gia sư xin nghỉ
     await pool(req).query(
-      "INSERT INTO YEUCAUDOIGIASU(MaLop,MaHV,MaGS,LanDoiThu,LyDo,TrangThai) VALUES($1,$2,$3,1,$4,'ChoXuLy')",
+      "INSERT INTO yeucaudoigiasu(malop,mahv,mags,landoithu,lydo,trangthai) VALUES($1,$2,$3,1,$4,'ChoXuLy')",
       [malop, mahv, mags, '[GS XIN NGHỈ]: ' + lydo]
     );
     res.json({ success: true, message: 'Đã gửi yêu cầu xin nghỉ thành công' });
@@ -234,13 +293,61 @@ router.post('/xinnghibuoi', async (req, res) => {
     if (!malop || !ngayday || !giobatdau || !gioketthuc || !lydo) return res.json({ success: false, message: 'Thiếu thông tin' });
     
     await pool(req).query(
-      "INSERT INTO BUOIDAY(MaLop, NgayDay, GioBatDau, GioKetThuc, TrangThai, NoiDung) VALUES($1, $2, $3, $4, 'GSNghi', $5)",
+      "INSERT INTO buoiday(malop, ngayday, giobatdau, gioketthuc, trangthai, noidung) VALUES($1, $2, $3, $4, 'GSNghi', $5)",
       [malop, ngayday, giobatdau, gioketthuc, lydo]
     );
     res.json({ success: true, message: 'Đã báo nghỉ thành công' });
   } catch (e) { 
     if (e.code === '23505') return res.json({ success: false, message: 'Buổi học trùng lặp thời gian' });
     res.json({ success: false, message: e.message }); 
+  }
+});
+
+// Cập nhật thông tin hồ sơ gia sư
+router.post('/me/update', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  try {
+    const { hoten, ngaysinh, gioitinh, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhdaidien, anhbangcap } = req.body;
+    
+    if (!hoten || !ngaysinh || !gioitinh || !sdt || !trinhdohocvan || !chuyennganh || !khuvuc || !hocphimongmuon) {
+      return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
+    }
+    
+    if (!/^\d{10,11}$/.test(sdt)) return res.json({ success: false, message: 'Số điện thoại phải gồm 10-11 chữ số' });
+    if (email && !email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải đúng định dạng @gmail.com' });
+    
+    const gsR = await pool(req).query('SELECT * FROM giasu WHERE matk = $1', [auth(req).matk]);
+    if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
+    const mags = gsR.rows[0].mags;
+    
+    let avatarPath = gsR.rows[0].anhdaidien;
+    let diplomaPath = gsR.rows[0].anhbangcap;
+    
+    if (anhdaidien && anhdaidien.startsWith('data:image')) {
+      avatarPath = saveBase64Image(anhdaidien, 'avatar');
+    }
+    if (anhbangcap && anhbangcap.startsWith('data:image')) {
+      diplomaPath = saveBase64Image(anhbangcap, 'bangcap');
+    }
+    
+    await pool(req).query(`
+      UPDATE giasu 
+      SET hoten = $1, ngaysinh = $2, gioitinh = $3, sdt = $4, email = $5, 
+          trinhdohocvan = $6, chuyennganh = $7, kinhnghiem = $8, khuvuc = $9, 
+          hocphimongmuon = $10, anhdaidien = $11, anhbangcap = $12
+      WHERE mags = $13
+    `, [
+      hoten, ngaysinh, gioitinh, sdt, email || null,
+      trinhdohocvan, chuyennganh, parseInt(kinhnghiem) || 0, khuvuc,
+      parseInt(hocphimongmuon), avatarPath, diplomaPath, mags
+    ]);
+    
+    await pool(req).query('UPDATE taikhoan SET email = $1 WHERE matk = $2', [email || null, auth(req).matk]);
+    
+    res.json({ success: true, message: 'Cập nhật thông tin hồ sơ thành công!' });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Lỗi server: ' + e.message });
   }
 });
 

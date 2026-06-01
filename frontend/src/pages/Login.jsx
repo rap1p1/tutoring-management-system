@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, X } from 'lucide-react';
 
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 function Login() {
   const [activeTab, setActiveTab] = useState('login');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -122,6 +131,20 @@ function Login() {
 
     setFieldErrors({});
     let errors = {};
+    
+    const fileCccd = e.target.anhcccd.files[0];
+    const fileBangCap = e.target.anhbangcap.files[0];
+    const fileTheSv = e.target.anhthesinhvien.files[0];
+    const fileAvatar = e.target.anhdaidien.files[0];
+
+    if (!fileCccd) {
+      errors.anhcccd = 'Ảnh CCCD là bắt buộc';
+    }
+    if (!fileBangCap && !fileTheSv) {
+      errors.anhbangcap = 'Vui lòng tải lên ít nhất Ảnh bằng cấp hoặc Ảnh thẻ sinh viên';
+      errors.anhthesinhvien = 'Vui lòng tải lên ít nhất Ảnh bằng cấp hoặc Ảnh thẻ sinh viên';
+    }
+
     if (data.password.length < 6) errors.password = 'Mật khẩu phải từ 6 ký tự trở lên';
     const todayObj = new Date();
     const eighteenYearsAgo = new Date(todayObj.getFullYear() - 18, todayObj.getMonth(), todayObj.getDate()).toISOString().split('T')[0];
@@ -142,6 +165,16 @@ function Login() {
 
     if (Object.keys(errors).length > 0) {
       return setFieldErrors(errors);
+    }
+
+    try {
+      if (fileCccd) data.anhcccd = await fileToBase64(fileCccd);
+      if (fileBangCap) data.anhbangcap = await fileToBase64(fileBangCap);
+      if (fileTheSv) data.anhthesinhvien = await fileToBase64(fileTheSv);
+      if (fileAvatar) data.anhdaidien = await fileToBase64(fileAvatar);
+    } catch (err) {
+      console.error(err);
+      return setFormError('Lỗi đọc tập tin hình ảnh. Vui lòng kiểm tra lại định dạng ảnh.');
     }
 
     try {
@@ -342,6 +375,34 @@ function Login() {
                       /> {kv}
                     </label>
                   ))}
+                </div>
+              </div>
+              
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <h4 style={{ margin: '15px 0 10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px', color: '#f8fafc' }}>Tệp Đính Kèm & Minh Chứng</h4>
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '15px' }}>
+                  * Bắt buộc có <strong>Ảnh CCCD</strong> và ít nhất một trong hai: <strong>Ảnh Bằng tốt nghiệp</strong> hoặc <strong>Ảnh Thẻ sinh viên</strong>.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div className="form-group">
+                    <label>Ảnh đại diện (Avatar)</label>
+                    <input type="file" name="anhdaidien" accept="image/*" style={{ border: 'none', background: 'none', padding: 0 }} />
+                  </div>
+                  <div className="form-group">
+                    <label>Ảnh CCCD *</label>
+                    <input type="file" name="anhcccd" accept="image/*" required style={{ border: 'none', background: 'none', padding: 0 }} />
+                    {fieldErrors.anhcccd && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{fieldErrors.anhcccd}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label>Ảnh Bằng tốt nghiệp</label>
+                    <input type="file" name="anhbangcap" accept="image/*" style={{ border: 'none', background: 'none', padding: 0 }} />
+                    {fieldErrors.anhbangcap && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{fieldErrors.anhbangcap}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label>Ảnh Thẻ sinh viên / Giấy tờ chuyên ngành</label>
+                    <input type="file" name="anhthesinhvien" accept="image/*" style={{ border: 'none', background: 'none', padding: 0 }} />
+                    {fieldErrors.anhthesinhvien && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{fieldErrors.anhthesinhvien}</span>}
+                  </div>
                 </div>
               </div>
             </div>
