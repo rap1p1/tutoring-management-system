@@ -26,6 +26,18 @@ function saveBase64Image(base64Str, prefix) {
   return `/uploads/${filename}`;
 }
 
+function deleteOldImage(oldPath) {
+  if (!oldPath || !oldPath.startsWith('/uploads/')) return;
+  const filePath = path.join(__dirname, '..', oldPath);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch(e) {
+      console.error('Lỗi khi xóa ảnh cũ:', e);
+    }
+  }
+}
+
 // Đăng ký tài khoản Gia Sư mới
 router.post('/register', async (req, res) => {
   try {
@@ -323,11 +335,19 @@ router.post('/me/update', async (req, res) => {
     let avatarPath = gsR.rows[0].anhdaidien;
     let diplomaPath = gsR.rows[0].anhbangcap;
     
-    if (anhdaidien && anhdaidien.startsWith('data:image')) {
-      avatarPath = saveBase64Image(anhdaidien, 'avatar');
+    if (anhdaidien && typeof anhdaidien === 'string' && anhdaidien.startsWith('data:image')) {
+      const newAvatarPath = saveBase64Image(anhdaidien, 'avatar');
+      if (newAvatarPath) {
+        deleteOldImage(avatarPath);
+        avatarPath = newAvatarPath;
+      }
     }
-    if (anhbangcap && anhbangcap.startsWith('data:image')) {
-      diplomaPath = saveBase64Image(anhbangcap, 'bangcap');
+    if (anhbangcap && typeof anhbangcap === 'string' && anhbangcap.startsWith('data:image')) {
+      const newDiplomaPath = saveBase64Image(anhbangcap, 'bangcap');
+      if (newDiplomaPath) {
+        deleteOldImage(diplomaPath);
+        diplomaPath = newDiplomaPath;
+      }
     }
     
     await pool(req).query(`
