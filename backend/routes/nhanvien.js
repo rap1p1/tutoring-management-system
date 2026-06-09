@@ -217,7 +217,7 @@ router.post('/lop/create', requireOps, async (req, res) => {
 // Lấy toàn bộ danh sách lớp học
 router.get('/lop', async (req, res) => {
   try {
-    const r = await pool(poolReq).query(
+    const r = await pool(req).query(
       `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop
        FROM lop l
        JOIN yeucauhockem yc ON yc.mayc = l.mayc

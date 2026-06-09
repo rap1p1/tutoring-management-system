@@ -78,7 +78,7 @@ function StudentDashboard() {
         body: JSON.stringify({
           mamh: data.mamh,
           caplop: data.caplop,
-          hinhthuchodHoc: data.hinhthuc,
+          hinhthuchoc: data.hinhthuc,
           yc_gioitinhgs: data.gioitinh,
           yc_trinhdogs: data.trinhdo,
           thoigianmongmuon: data.thoigian,
@@ -339,15 +339,15 @@ function StudentDashboard() {
                   <div key={t.mahp} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                       <strong>{t.tenmh}</strong>
-                      <span className={t.trangthaitt === 'DaThanhToan' ? 'text-teal' : 'text-rose'}>
-                        {parseInt(t.sotien).toLocaleString()}đ
+                      <span className={t.trangthai === 'DaNop' ? 'text-teal' : 'text-rose'}>
+                        {parseInt(t.tonghocphi).toLocaleString()}đ
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      Hạn: {new Date(t.hannot_hp).toLocaleDateString()}
+                      Hạn: {new Date(t.kytt_den).toLocaleDateString()}
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      Trạng thái: {t.trangthaitt === 'DaThanhToan' ? 'Đã Thanh Toán' : 'Chưa Thanh Toán'}
+                      Trạng thái: {t.trangthai === 'DaNop' ? 'Đã Thanh Toán' : 'Chưa Thanh Toán'}
                     </div>
                   </div>
                 ))

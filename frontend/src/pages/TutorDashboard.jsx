@@ -721,8 +721,8 @@ function TutorDashboard() {
                   <div key={c.mahh} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <strong>{c.tenmh}</strong>
-                      <span className={c.trangthaitt === 'DaThanhToan' ? 'text-teal' : 'text-amber'}>
-                        {parseInt(c.sotien).toLocaleString()}đ
+                      <span className={c.trangthai === 'DaTT' ? 'text-teal' : 'text-amber'}>
+                        {parseInt(c.tonghoahong).toLocaleString()}đ
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>

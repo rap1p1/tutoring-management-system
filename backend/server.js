@@ -118,6 +118,12 @@ app.get('/api/auth/check-username', async (req, res) => {
   }
 });
 
+// Pass pool to routes via app.locals (must be set BEFORE mounting routes)
+app.locals.pool = pool;
+app.locals.requireAuth = requireAuth;
+app.locals.requireRole = requireRole;
+app.locals.bcrypt = bcrypt;
+
 // ============================================================
 // ROUTES - mount separate files
 // ============================================================
@@ -126,12 +132,6 @@ app.use('/api/hocvien',   require('./routes/hocvien'));
 app.use('/api/giasu',     require('./routes/giasu'));
 app.use('/api/lop',       require('./routes/lop'));
 app.use('/api/nhanvien',  require('./routes/nhanvien'));
-
-// Pass pool to routes via app.locals
-app.locals.pool = pool;
-app.locals.requireAuth = requireAuth;
-app.locals.requireRole = requireRole;
-app.locals.bcrypt = bcrypt;
 
 // ============================================================
 // SEED DATA (tạo tài khoản mặc định)
