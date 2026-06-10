@@ -38,10 +38,8 @@ function TutorDashboard() {
   // Modals state
   const [showSubjectModal, setShowSubjectModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
   const [showResignModal, setShowResignModal] = useState(false);
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
-  const [isEmergency, setIsEmergency] = useState(false);
   const [selectedDays, setSelectedDays] = useState([]);
   const [selectedSessions, setSelectedSessions] = useState([]);
   
@@ -59,8 +57,6 @@ function TutorDashboard() {
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [classSessions, setClassSessions] = useState([]);
-  const [showAddSessionModal, setShowAddSessionModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(null);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
   useEffect(() => {
@@ -110,7 +106,6 @@ function TutorDashboard() {
       console.error(e);
     }
   };
-
 
   const handleDeleteSchedule = async (id) => {
     const result = await Swal.fire({
@@ -206,38 +201,6 @@ function TutorDashboard() {
     }
   };
 
-  const handleReportClass = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = {
-      ngayday: formData.get('ngayday'),
-      giobatdau: formData.get('giobatdau'),
-      gioketthuc: formData.get('gioketthuc'),
-      noidung: formData.get('noidung') || '',
-      trangthai: formData.get('trangthai')
-    };
-    try {
-      setModalMsg({ text: '', type: '' });
-      const res = await fetch(`/api/lop/${selectedClassId}/buoiday`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      const json = await res.json();
-      if (json.success) {
-        setModalMsg({ text: 'Ghi nhận thành công!', type: 'success' });
-        setTimeout(() => {
-          setShowReportModal(false);
-          setModalMsg({ text: '', type: '' });
-        }, 1500);
-      } else {
-        setModalMsg({ text: json.message, type: 'error' });
-      }
-    } catch (e) {
-      setModalMsg({ text: 'Lỗi kết nối', type: 'error' });
-    }
-  };
-
   const handleResignClass = async (e) => {
     e.preventDefault();
     try {
@@ -272,14 +235,6 @@ function TutorDashboard() {
       const json = await res.json();
       if (json.success) {
         setClassSessions(json.data || []);
-      } else {
-        Swal.fire({
-          title: 'Lỗi',
-          text: json.message || 'Không thể lấy danh sách buổi dạy',
-          icon: 'error',
-          background: '#1e293b',
-          color: '#fff'
-        });
       }
     } catch (e) {
       console.error(e);
@@ -294,82 +249,102 @@ function TutorDashboard() {
     setShowCalendarModal(true);
   };
 
-  const handleCancelSession = async (mabuoi) => {
+  // Xử lý khi click vào buổi học trên lịch (Ghi nhận dạy hoặc Báo nghỉ)
+  const handleConfirmSession = async (session) => {
     const result = await Swal.fire({
-      title: 'Hủy buổi học',
-      text: 'Bạn có chắc chắn muốn hủy mềm buổi học này không? Trạng thái sẽ được đổi thành "Huy" để lưu vết.',
-      icon: 'warning',
+      title: 'Tùy chọn buổi dạy',
+      text: `Chọn hành động cho ngày ${new Date(session.ngayday).toLocaleDateString('vi-VN')} (Ca ${caHocLabel(session.cahoc)}):`,
+      icon: 'question',
+      showDenyButton: true,
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
+      confirmButtonText: '✓ Ghi nhận đã dạy',
+      denyButtonText: '❌ Báo nghỉ buổi này',
+      cancelButtonText: 'Quay lại',
+      confirmButtonColor: '#10b981',
+      denyButtonColor: '#ef4444',
       cancelButtonColor: '#64748b',
-      confirmButtonText: 'Đồng ý hủy',
-      cancelButtonText: 'Không',
       background: '#1e293b',
       color: '#fff'
     });
 
-    if (!result.isConfirmed) return;
-
-    try {
-      const res = await fetch(`/api/lop/${selectedClassId}/buoiday/${mabuoi}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const json = await res.json();
-      if (json.success) {
-        Swal.fire({
-          title: 'Thành công',
-          text: 'Đã hủy buổi học thành công.',
-          icon: 'success',
-          background: '#1e293b',
-          color: '#fff'
+    if (result.isConfirmed) {
+      try {
+        const res = await fetch(`/api/lop/${selectedClassId}/buoiday/${session.mabuoi}/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
         });
-        fetchClassSessions(selectedClassId);
-      } else {
-        Swal.fire({
-          title: 'Lỗi',
-          text: json.message || 'Không thể hủy buổi học',
-          icon: 'error',
-          background: '#1e293b',
-          color: '#fff'
-        });
+        const json = await res.json();
+        if (json.success) {
+          Swal.fire({ title: 'Thành công', text: 'Đã ghi nhận dạy thành công!', icon: 'success', background: '#1e293b', color: '#fff' });
+          fetchClassSessions(selectedClassId);
+        } else {
+          Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      } catch (e) {
+        Swal.fire({ title: 'Lỗi kết nối', text: 'Không thể kết nối đến máy chủ', icon: 'error', background: '#1e293b', color: '#fff' });
       }
-    } catch (e) {
-      console.error(e);
-      Swal.fire({
-        title: 'Lỗi kết nối',
-        text: 'Không thể kết nối đến máy chủ',
-        icon: 'error',
+    } else if (result.isDenied) {
+      const reasonResult = await Swal.fire({
+        title: 'Báo nghỉ buổi học',
+        text: `Nhập lý do xin nghỉ cho ngày ${new Date(session.ngayday).toLocaleDateString('vi-VN')} (Ca ${caHocLabel(session.cahoc)}):`,
+        input: 'textarea',
+        inputPlaceholder: 'Nhập lý do xin nghỉ...',
+        showCancelButton: true,
+        confirmButtonText: 'Báo nghỉ',
+        cancelButtonText: 'Hủy',
         background: '#1e293b',
-        color: '#fff'
+        color: '#fff',
+        inputValidator: (value) => {
+          if (!value) return 'Vui lòng nhập lý do!';
+        }
       });
+
+      if (reasonResult.isConfirmed && reasonResult.value) {
+        try {
+          const res = await fetch('/api/giasu/xinnghibuoi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              malop: selectedClassId,
+              ngayday: getSessionDateString(session.ngayday),
+              cahoc: session.cahoc,
+              lydo: reasonResult.value
+            })
+          });
+          const json = await res.json();
+          if (json.success) {
+            Swal.fire({ title: 'Thành công', text: 'Đã báo nghỉ thành công!', icon: 'success', background: '#1e293b', color: '#fff' });
+            fetchClassSessions(selectedClassId);
+          } else {
+            Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+          }
+        } catch (e) {
+          Swal.fire({ title: 'Lỗi kết nối', text: 'Không thể kết nối đến máy chủ', icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      }
     }
   };
 
-  const handleCreateSessionCalendar = async (e) => {
+  const handleAbsence = async (e) => {
     e.preventDefault();
-    const data = {
-      ngayday: selectedDate,
-      giobatdau: e.target.giobatdau.value,
-      gioketthuc: e.target.gioketthuc.value,
-      sogio: parseFloat(e.target.sogio.value) || 2.0,
-      noidung: e.target.noidung.value,
-      trangthai: 'DaDay',
-      repeat: e.target.repeat.checked
-    };
     try {
       setModalMsg({ text: '', type: '' });
-      const res = await fetch(`/api/lop/${selectedClassId}/buoiday`, {
+      const res = await fetch('/api/giasu/xinnghibuoi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+          malop: selectedClassId,
+          ngayday: e.target.ngayday.value,
+          cahoc: e.target.cahoc.value,
+          lydo: e.target.lydo.value
+        })
       });
       const json = await res.json();
       if (json.success) {
-        setModalMsg({ text: 'Đăng ký buổi dạy mới thành công!', type: 'success' });
-        fetchClassSessions(selectedClassId);
+        setModalMsg({ text: 'Đã báo nghỉ thành công!', type: 'success' });
+        if (showCalendarModal) fetchClassSessions(selectedClassId);
         setTimeout(() => {
-          setShowAddSessionModal(false);
+          setShowAbsenceModal(false);
           setModalMsg({ text: '', type: '' });
         }, 1500);
       } else {
@@ -401,115 +376,41 @@ function TutorDashboard() {
       });
       const json = await res.json();
       if (json.success) {
-        Swal.fire({
-          title: 'Thành công',
-          text: 'Cập nhật thông tin hồ sơ thành công!',
-          icon: 'success',
-          background: '#1e293b',
-          color: '#fff'
-        });
+        Swal.fire({ title: 'Thành công', text: 'Cập nhật thông tin hồ sơ thành công!', icon: 'success', background: '#1e293b', color: '#fff' });
         fetchData();
       } else {
-        Swal.fire({
-          title: 'Thất bại',
-          text: json.message || 'Lỗi khi cập nhật hồ sơ',
-          icon: 'error',
-          background: '#1e293b',
-          color: '#fff'
-        });
+        Swal.fire({ title: 'Thất bại', text: json.message || 'Lỗi khi cập nhật hồ sơ', icon: 'error', background: '#1e293b', color: '#fff' });
       }
     } catch (err) {
-      console.error(err);
-      Swal.fire({
-        title: 'Lỗi',
-        text: 'Lỗi kết nối máy chủ',
-        icon: 'error',
-        background: '#1e293b',
-        color: '#fff'
-      });
+      Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối máy chủ', icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
   const handlePrevMonth = () => {
-    if (calendarMonth === 0) {
-      setCalendarMonth(11);
-      setCalendarYear(calendarYear - 1);
-    } else {
-      setCalendarMonth(calendarMonth - 1);
-    }
+    if (calendarMonth === 0) { setCalendarMonth(11); setCalendarYear(calendarYear - 1); }
+    else { setCalendarMonth(calendarMonth - 1); }
   };
 
   const handleNextMonth = () => {
-    if (calendarMonth === 11) {
-      setCalendarMonth(0);
-      setCalendarYear(calendarYear + 1);
-    } else {
-      setCalendarMonth(calendarMonth + 1);
-    }
+    if (calendarMonth === 11) { setCalendarMonth(0); setCalendarYear(calendarYear + 1); }
+    else { setCalendarMonth(calendarMonth + 1); }
   };
 
-  const getDaysInMonth = (year, month) => {
-    return new Date(year, month + 1, 0).getDate();
-  };
-
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year, month) => {
     const day = new Date(year, month, 1).getDay();
-    return day === 0 ? 6 : day - 1; // Mon-Sun index
+    return day === 0 ? 6 : day - 1;
   };
 
   const getSessionDateString = (dateInput) => {
     if (!dateInput) return '';
-    if (typeof dateInput === 'string') {
-      return dateInput.split('T')[0];
-    }
     const d = new Date(dateInput);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
-  const checkEmergency = (dateStr, timeStr) => {
-    if (!dateStr || !timeStr) return;
-    const targetDate = new Date(`${dateStr}T${timeStr}`);
-    const now = new Date();
-    const diffHours = (targetDate - now) / (1000 * 60 * 60);
-    setIsEmergency(diffHours >= 0 && diffHours < 24);
-  };
-
-  const handleAbsence = async (e) => {
-    e.preventDefault();
-    if (isEmergency && !e.target.emergencyCheck?.checked) {
-      setModalMsg({ text: 'Vui lòng xác nhận đây là trường hợp bất khả kháng!', type: 'error' });
-      return;
-    }
-    try {
-      setModalMsg({ text: '', type: '' });
-      let finalLyDo = e.target.lydo.value;
-      if (isEmergency) finalLyDo = '[BẤT KHẢ KHÁNG] ' + finalLyDo;
-      
-      const res = await fetch('/api/giasu/xinnghibuoi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          malop: selectedClassId,
-          ngayday: e.target.ngayday.value,
-          giobatdau: e.target.giobatdau.value,
-          gioketthuc: e.target.gioketthuc.value,
-          lydo: finalLyDo
-        })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setModalMsg({ text: 'Đã báo nghỉ thành công!', type: 'success' });
-        setTimeout(() => {
-          setShowAbsenceModal(false);
-          setModalMsg({ text: '', type: '' });
-          setIsEmergency(false);
-        }, 1500);
-      } else {
-        setModalMsg({ text: json.message, type: 'error' });
-      }
-    } catch (e) {
-      setModalMsg({ text: 'Lỗi kết nối', type: 'error' });
-    }
+  const caHocLabel = (ca) => {
+    const map = { 'Sang': 'Sáng', 'Chieu': 'Chiều', 'Toi': 'Tối' };
+    return map[ca] || ca;
   };
 
   const daysInMonth = getDaysInMonth(calendarYear, calendarMonth);
@@ -542,12 +443,10 @@ function TutorDashboard() {
       </div>
 
       {profile.trangthaihoso !== 'DaDuyet' && (
-        <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: '1px solid #f59e0b', padding: '16px', borderRadius: '12px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <h4 style={{ margin: 0, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ⚠️ Hồ sơ đang chờ phê duyệt
-          </h4>
-          <p style={{ margin: 0, fontSize: '14px', opacity: 0.9 }}>
-            Tài khoản của bạn hiện đang chờ trung tâm xét duyệt các minh chứng (CCCD, bằng cấp). Các tính năng đăng ký lịch rảnh, xem lịch dạy lớp học, nhận lớp và ghi nhận buổi dạy tạm thời bị khóa cho đến khi hồ sơ của bạn được phê duyệt chính thức.
+        <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: '1px solid #f59e0b', padding: '16px', borderRadius: '12px', marginBottom: '24px' }}>
+          <h4 style={{ margin: 0, fontWeight: 'bold' }}>⚠️ Hồ sơ đang chờ phê duyệt</h4>
+          <p style={{ margin: '8px 0 0 0', fontSize: '14px', opacity: 0.9 }}>
+            Tài khoản của bạn hiện đang chờ trung tâm xét duyệt. Các tính năng lịch dạy và ghi nhận buổi dạy tạm thời bị khóa.
           </p>
         </div>
       )}
@@ -569,36 +468,9 @@ function TutorDashboard() {
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Giới tính</strong> {profile.gioitinh}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Số ĐT</strong> {profile.sdt}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Email</strong> {profile.email || 'Không có'}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>CCCD</strong> {profile.cccd}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Trình độ</strong> {profile.trinhdohocvan}</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Chuyên ngành</strong> {profile.chuyennganh}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Kinh nghiệm</strong> {profile.kinhnghiem} năm</div>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Khu vực dạy</strong> {profile.khuvuc}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Học phí MM</strong> {parseInt(profile.hocphimongmuon).toLocaleString()}đ/buổi</div>
-              <div>
-                <strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Minh chứng CCCD</strong> 
-                {profile.anhcccd ? (
-                  <a href={profile.anhcccd} target="_blank" rel="noreferrer" style={{ color: 'var(--color-teal)', textDecoration: 'underline' }}>Xem ảnh CCCD</a>
-                ) : (
-                  <span style={{ color: '#64748b' }}>Chưa tải lên</span>
-                )}
-              </div>
-              <div>
-                <strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Minh chứng Bằng tốt nghiệp</strong> 
-                {profile.anhbangcap ? (
-                  <a href={profile.anhbangcap} target="_blank" rel="noreferrer" style={{ color: 'var(--color-teal)', textDecoration: 'underline' }}>Xem bằng tốt nghiệp</a>
-                ) : (
-                  <span style={{ color: '#64748b' }}>Chưa tải lên</span>
-                )}
-              </div>
-              <div>
-                <strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Minh chứng Thẻ sinh viên</strong> 
-                {profile.anhthesinhvien ? (
-                  <a href={profile.anhthesinhvien} target="_blank" rel="noreferrer" style={{ color: 'var(--color-teal)', textDecoration: 'underline' }}>Xem thẻ SV</a>
-                ) : (
-                  <span style={{ color: '#64748b' }}>Chưa tải lên</span>
-                )}
-              </div>
             </div>
           </div>
 
@@ -611,46 +483,33 @@ function TutorDashboard() {
                     <tr>
                       <th>Mã Lớp</th>
                       <th>Môn học</th>
-                      <th>Cấp lớp</th>
                       <th>Học viên</th>
-                      <th>Địa chỉ</th>
+                      <th>Số ngày</th>
                       <th>Hành động</th>
                     </tr>
                   </thead>
                   <tbody>
                     {classes.length === 0 ? (
-                      <tr><td colSpan="6" style={{ textAlign: 'center' }}>Chưa nhận lớp nào</td></tr>
+                      <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa nhận lớp nào</td></tr>
                     ) : (
                       classes.map(c => (
                         <tr key={c.malop}>
                           <td>{c.malop}</td>
-                          <td>{c.tenmh}</td>
-                          <td>{c.caplop}</td>
+                          <td>{c.tenmh} ({c.caplop})</td>
                           <td>{c.tenhocvien}</td>
-                          <td>{c.diachi}</td>
+                          <td>{c.songayhoc || '?'} ngày</td>
                           <td>
-                            <div style={{ display: 'flex', gap: '5px' }}>
+                            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                               <button 
                                 className="btn btn-xs btn-teal" 
                                 disabled={profile.trangthaihoso !== 'DaDuyet'} 
                                 onClick={() => handleOpenCalendar(c.malop)}
                                 style={profile.trangthaihoso !== 'DaDuyet' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                               >
-                                Lịch dạy
-                              </button>
-                              <button 
-                                className="btn btn-xs btn-primary" 
-                                disabled={profile.trangthaihoso !== 'DaDuyet'} 
-                                onClick={() => { setSelectedClassId(c.malop); setShowReportModal(true); }}
-                                style={profile.trangthaihoso !== 'DaDuyet' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                              >
-                                Ghi nhận dạy
+                                📅 Lịch dạy & Ghi nhận
                               </button>
                               <button className="btn btn-xs btn-rose" onClick={() => { setSelectedClassId(c.malop); setShowResignModal(true); }}>
-                                Xin nghỉ (Bỏ lớp)
-                              </button>
-                              <button className="btn btn-xs btn-secondary" onClick={() => { setSelectedClassId(c.malop); setShowAbsenceModal(true); setIsEmergency(false); }}>
-                                Báo vắng 1 buổi
+                                Xin nghỉ
                               </button>
                             </div>
                           </td>
@@ -726,7 +585,7 @@ function TutorDashboard() {
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {new Date(c.kytt_tu).toLocaleDateString()} - {new Date(c.kytt_den).toLocaleDateString()}
+                      {c.sobuoidaday} buổi × {parseInt(c.hocphihvmoibuoi).toLocaleString()}đ × {c.tylehh}%
                     </div>
                   </div>
                 ))
@@ -781,10 +640,6 @@ function TutorDashboard() {
                 <option value="Sư phạm Tiếng Anh">Sư phạm Tiếng Anh</option>
                 <option value="Sư phạm Vật lý">Sư phạm Vật lý</option>
                 <option value="Sư phạm Hóa học">Sư phạm Hóa học</option>
-                <option value="Sư phạm Sinh học">Sư phạm Sinh học</option>
-                <option value="Sư phạm Tin học">Sư phạm Tin học</option>
-                <option value="Khoa học Tự nhiên (KHTN)">Tổ hợp Khoa học Tự nhiên</option>
-                <option value="Khoa học Xã hội (KHXH)">Tổ hợp Khoa học Xã hội</option>
                 <option value="Khác">Khác</option>
               </select>
             </div>
@@ -798,7 +653,6 @@ function TutorDashboard() {
             </div>
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>Khu vực dạy * <span style={{fontSize:'12px', color:'#94a3b8'}}>(Có thể tick chọn nhiều)</span></label>
-              
               {selectedDistricts.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
                   {selectedDistricts.map(d => (
@@ -809,18 +663,10 @@ function TutorDashboard() {
                   ))}
                 </div>
               )}
-
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', maxHeight: '150px', overflowY: 'auto', padding: '12px', border: '1px solid #334155', borderRadius: '8px', backgroundColor: '#0f172a' }}>
-                {['Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8', 'Quận 10', 'Quận 11', 'Quận 12', 'Quận Bình Tân', 'Quận Bình Thạnh', 'Quận Gò Vấp', 'Quận Phú Nhuận', 'Quận Tân Bình', 'Quận Tân Phú', 'TP Thủ Đức', 'Huyện Bình Chánh', 'Huyện Cần Giờ', 'Huyện Củ Chi', 'Huyện Hóc Môn', 'Huyện Nhà Bè', 'Khác'].map(kv => (
+                {['Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8', 'Quận 10', 'Quận 11', 'Quận 12', 'Quận Bình Tân', 'Quận Bình Thạnh', 'Quận Gò Vấp', 'Quận Phú Nhuận', 'Quận Tân Bình', 'Quận Tân Phú', 'TP Thủ Đức', 'Huyện Bình Chánh', 'Khác'].map(kv => (
                   <label key={kv} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', color: '#f8fafc' }}>
-                    <input 
-                      type="checkbox" 
-                      name="khuvuc" 
-                      value={kv} 
-                      checked={selectedDistricts.includes(kv)}
-                      onChange={handleDistrictChange}
-                      style={{ width: '16px', height: '16px', accentColor: '#14b8a6', cursor: 'pointer' }} 
-                    /> {kv}
+                    <input type="checkbox" name="khuvuc" value={kv} checked={selectedDistricts.includes(kv)} onChange={handleDistrictChange} style={{ width: '16px', height: '16px', accentColor: '#14b8a6', cursor: 'pointer' }} /> {kv}
                   </label>
                 ))}
               </div>
@@ -831,10 +677,24 @@ function TutorDashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div className="form-group">
                   <label>Ảnh đại diện mới (Avatar)</label>
+                  {profile.anhdaidien && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <a href={profile.anhdaidien} target="_blank" rel="noreferrer" style={{ color: '#14b8a6', textDecoration: 'underline', fontSize: '13px' }}>
+                        👁 Xem ảnh đại diện hiện tại
+                      </a>
+                    </div>
+                  )}
                   <input type="file" name="anhdaidien" accept="image/*" style={{ border: 'none', background: 'none', padding: 0 }} />
                 </div>
                 <div className="form-group">
                   <label>Ảnh Bằng cấp mới (Nếu có)</label>
+                  {profile.anhbangcap && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <a href={profile.anhbangcap} target="_blank" rel="noreferrer" style={{ color: '#14b8a6', textDecoration: 'underline', fontSize: '13px' }}>
+                        👁 Xem ảnh bằng cấp hiện tại
+                      </a>
+                    </div>
+                  )}
                   <input type="file" name="anhbangcap" accept="image/*" style={{ border: 'none', background: 'none', padding: 0 }} />
                 </div>
               </div>
@@ -844,7 +704,7 @@ function TutorDashboard() {
         </form>
       </div>
 
-      {/* Modals */}
+      {/* Subject Modal */}
       {showSubjectModal && (
         <div className="modal" style={{ display: 'flex' }}>
           <div className="modal-content glass-card">
@@ -858,38 +718,17 @@ function TutorDashboard() {
               </div>
             )}
             <form onSubmit={handleAddSubject}>
-              <div className="form-group">
-                <label>Môn học *</label>
-                <select name="mamh" required>
-                  {allSubjects.map(s => <option key={s.mamh} value={s.mamh}>{s.tenmh}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Cấp lớp dạy *</label>
-                <select name="caplop" required>
-                  <option value="Cấp 1">Cấp 1 (Lớp 1 - Lớp 5)</option>
-                  <option value="Cấp 2">Cấp 2 (Lớp 6 - Lớp 9)</option>
-                  <option value="Cấp 3">Cấp 3 (Lớp 10 - Lớp 12)</option>
-                  <option value="Luyện thi Đại học">Luyện thi Đại học</option>
-                  <option value="Tiếng Anh Giao tiếp">Tiếng Anh Giao tiếp</option>
-                  <option value="Chứng chỉ Quốc tế">Chứng chỉ Quốc tế</option>
-                  <option value="Khác">Khác</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Học phí đề xuất (/buổi) *</label>
-                <input type="number" name="hocphi" required min="50000" step="50000" />
-              </div>
-              <div className="form-group">
-                <label>Ghi chú</label>
-                <input type="text" name="ghichu" />
-              </div>
+              <div className="form-group"><label>Môn học *</label><select name="mamh" required>{allSubjects.map(s => <option key={s.mamh} value={s.mamh}>{s.tenmh}</option>)}</select></div>
+              <div className="form-group"><label>Cấp lớp dạy *</label><select name="caplop" required><option value="Cấp 1">Cấp 1</option><option value="Cấp 2">Cấp 2</option><option value="Cấp 3">Cấp 3</option><option value="Luyện thi Đại học">Luyện thi ĐH</option><option value="Khác">Khác</option></select></div>
+              <div className="form-group"><label>Học phí đề xuất (/buổi) *</label><input type="number" name="hocphi" required min="50000" step="50000" /></div>
+              <div className="form-group"><label>Ghi chú</label><input type="text" name="ghichu" /></div>
               <button type="submit" className="btn btn-primary btn-block">Đăng Ký</button>
             </form>
           </div>
         </div>
       )}
 
+      {/* Schedule Modal */}
       {showScheduleModal && (
         <div className="modal" style={{ display: 'flex' }}>
           <div className="modal-content glass-card">
@@ -906,28 +745,9 @@ function TutorDashboard() {
               <div className="form-group">
                 <label style={{ display: 'block', marginBottom: '8px' }}>Thứ trong tuần *</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                  {[
-                    { label: 'Thứ 2', value: '2' },
-                    { label: 'Thứ 3', value: '3' },
-                    { label: 'Thứ 4', value: '4' },
-                    { label: 'Thứ 5', value: '5' },
-                    { label: 'Thứ 6', value: '6' },
-                    { label: 'Thứ 7', value: '7' },
-                    { label: 'Chủ Nhật', value: '8' }
-                  ].map(day => (
+                  {[{ label: 'Thứ 2', value: '2' },{ label: 'Thứ 3', value: '3' },{ label: 'Thứ 4', value: '4' },{ label: 'Thứ 5', value: '5' },{ label: 'Thứ 6', value: '6' },{ label: 'Thứ 7', value: '7' },{ label: 'CN', value: '8' }].map(day => (
                     <label key={day.value} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '13px' }}>
-                      <input 
-                        type="checkbox" 
-                        value={day.value} 
-                        checked={selectedDays.includes(day.value)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedDays([...selectedDays, day.value]);
-                          } else {
-                            setSelectedDays(selectedDays.filter(d => d !== day.value));
-                          }
-                        }}
-                      />
+                      <input type="checkbox" value={day.value} checked={selectedDays.includes(day.value)} onChange={(e) => { if (e.target.checked) setSelectedDays([...selectedDays, day.value]); else setSelectedDays(selectedDays.filter(d => d !== day.value)); }} />
                       <span>{day.label}</span>
                     </label>
                   ))}
@@ -936,85 +756,22 @@ function TutorDashboard() {
               <div className="form-group" style={{ marginTop: '15px' }}>
                 <label style={{ display: 'block', marginBottom: '8px' }}>Ca học *</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {[
-                    { label: 'Sáng (8h - 11h)', value: 'Sang' },
-                    { label: 'Chiều (14h - 17h)', value: 'Chieu' },
-                    { label: 'Tối (18h - 21h)', value: 'Toi' }
-                  ].map(session => (
+                  {[{ label: 'Sáng (7:00 - 10:00)', value: 'Sang' },{ label: 'Chiều (14:00 - 17:00)', value: 'Chieu' },{ label: 'Tối (18:00 - 21:00)', value: 'Toi' }].map(session => (
                     <label key={session.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                      <input 
-                        type="checkbox" 
-                        value={session.value} 
-                        checked={selectedSessions.includes(session.value)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedSessions([...selectedSessions, session.value]);
-                          } else {
-                            setSelectedSessions(selectedSessions.filter(s => s !== session.value));
-                          }
-                        }}
-                      />
+                      <input type="checkbox" value={session.value} checked={selectedSessions.includes(session.value)} onChange={(e) => { if (e.target.checked) setSelectedSessions([...selectedSessions, session.value]); else setSelectedSessions(selectedSessions.filter(s => s !== session.value)); }} />
                       <span>{session.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
-              <div className="form-group" style={{ marginTop: '15px' }}>
-                <label>Ghi chú</label>
-                <input type="text" name="ghichu" />
-              </div>
+              <div className="form-group" style={{ marginTop: '15px' }}><label>Ghi chú</label><input type="text" name="ghichu" /></div>
               <button type="submit" className="btn btn-teal btn-block">Thêm Lịch</button>
             </form>
           </div>
         </div>
       )}
 
-      {showReportModal && (
-        <div className="modal" style={{ display: 'flex' }}>
-          <div className="modal-content glass-card">
-            <div className="modal-header">
-              <h3>Ghi Nhận Buổi Dạy - Lớp {selectedClassId}</h3>
-              <span className="close-btn" onClick={() => { setShowReportModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
-            </div>
-            {modalMsg.text && (
-              <div style={{ backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, padding: '10px', borderRadius: '6px', marginBottom: '15px' }}>
-                {modalMsg.text}
-              </div>
-            )}
-            <form onSubmit={handleReportClass}>
-              <div className="form-group">
-                <label>Ngày dạy *</label>
-                <input type="date" name="ngayday" required defaultValue={new Date().toISOString().split('T')[0]} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-group">
-                  <label>Giờ bắt đầu *</label>
-                  <input type="time" name="giobatdau" required defaultValue="18:00" />
-                </div>
-                <div className="form-group">
-                  <label>Giờ kết thúc *</label>
-                  <input type="time" name="gioketthuc" required defaultValue="20:00" />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Trạng thái buổi học *</label>
-                <select name="trangthai" required>
-                  <option value="DaDay">Đã dạy bình thường</option>
-                  <option value="HVVangCoPhep">Học viên vắng (Có phép)</option>
-                  <option value="HVVangKhongPhep">Học viên vắng (Không phép)</option>
-                  <option value="GSNghi">Gia sư nghỉ (Có báo trước)</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Nội dung bài học / Ghi chú</label>
-                <textarea name="noidung" rows="3" style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}></textarea>
-              </div>
-              <button type="submit" className="btn btn-primary btn-block">Lưu Ghi Nhận</button>
-            </form>
-          </div>
-        </div>
-      )}
-
+      {/* Resign Modal */}
       {showResignModal && (
         <div className="modal" style={{ display: 'flex' }}>
           <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
@@ -1022,104 +779,56 @@ function TutorDashboard() {
               <h3>Xin Nghỉ Dạy - Lớp {selectedClassId}</h3>
               <span className="close-btn" onClick={() => { setShowResignModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
             </div>
-            
-            {modalMsg.text && (
-              <div style={{ 
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', 
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, 
-                padding: '10px', borderRadius: '6px', marginBottom: '15px' 
-              }}>
-                {modalMsg.text}
-              </div>
-            )}
-            
+            {modalMsg.text && (<div style={{ backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, padding: '10px', borderRadius: '6px', marginBottom: '15px' }}>{modalMsg.text}</div>)}
             <form onSubmit={handleResignClass}>
-              <div className="form-group">
-                <label>Lý do xin nghỉ (Chi tiết) *</label>
-                <textarea name="lydo" rows="4" required style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }} placeholder="Ghi rõ lý do bạn muốn xin nghỉ lớp này..."></textarea>
-              </div>
-              <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '15px' }}>
-                * Sau khi gửi yêu cầu, trung tâm sẽ liên hệ để xác nhận và chốt hoa hồng/lương.
-              </p>
+              <div className="form-group"><label>Lý do xin nghỉ *</label><textarea name="lydo" rows="4" required style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }} placeholder="Ghi rõ lý do..."></textarea></div>
               <button type="submit" className="btn btn-rose btn-block">Gửi Yêu Cầu Xin Nghỉ</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Absence Modal */}
+      {/* Absence Modal - ĐƠN GIẢN HÓA */}
       {showAbsenceModal && (
         <div className="modal" style={{ display: 'flex' }}>
           <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>Báo Vắng 1 Buổi - Lớp {selectedClassId}</h3>
-              <span className="close-btn" onClick={() => { setShowAbsenceModal(false); setModalMsg({text:'', type:''}); setIsEmergency(false); }}>&times;</span>
+              <span className="close-btn" onClick={() => { setShowAbsenceModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
             </div>
-            
-            {modalMsg.text && (
-              <div style={{ 
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', 
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, 
-                padding: '10px', borderRadius: '6px', marginBottom: '15px' 
-              }}>
-                {modalMsg.text}
-              </div>
-            )}
-            
+            {modalMsg.text && (<div style={{ backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, padding: '10px', borderRadius: '6px', marginBottom: '15px' }}>{modalMsg.text}</div>)}
             <form onSubmit={handleAbsence}>
-              <div className="form-group">
-                <label>Ngày xin nghỉ *</label>
-                <input type="date" name="ngayday" required min={new Date().toISOString().split('T')[0]} id="tutor_abs_date" onChange={(e) => checkEmergency(e.target.value, document.getElementById('tutor_abs_time').value)} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-group">
-                  <label>Giờ bắt đầu *</label>
-                  <input type="time" name="giobatdau" id="tutor_abs_time" required onChange={(e) => checkEmergency(document.getElementById('tutor_abs_date').value, e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label>Giờ kết thúc *</label>
-                  <input type="time" name="gioketthuc" required />
-                </div>
-              </div>
-              
-              {isEmergency && (
-                <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', padding: '10px', borderRadius: '6px', marginBottom: '15px' }}>
-                  <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 10px 0', fontWeight: 'bold' }}>
-                    Cảnh báo: Bạn đang báo nghỉ sát giờ (dưới 24h).
-                  </p>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    <input type="checkbox" name="emergencyCheck" />
-                    <span>Tôi xác nhận đây là sự cố bất khả kháng.</span>
-                  </label>
-                </div>
-              )}
-
-              <div className="form-group">
-                <label>Lý do xin nghỉ *</label>
-                <textarea name="lydo" rows="3" required style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }} placeholder={isEmergency ? "Vui lòng ghi rõ sự cố bất khả kháng..." : "Lý do xin nghỉ..."}></textarea>
-              </div>
+              <div className="form-group"><label>Ngày xin nghỉ *</label><input type="date" name="ngayday" required min={new Date().toISOString().split('T')[0]} /></div>
+              <div className="form-group"><label>Ca học *</label><select name="cahoc" required><option value="Sang">Sáng (7:00 - 10:00)</option><option value="Chieu">Chiều (14:00 - 17:00)</option><option value="Toi">Tối (18:00 - 21:00)</option></select></div>
+              <div className="form-group"><label>Lý do *</label><textarea name="lydo" rows="3" required style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }} placeholder="Lý do xin nghỉ..."></textarea></div>
               <button type="submit" className="btn btn-rose btn-block">Gửi Báo Vắng</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Calendar Modal */}
+      {/* Calendar Modal - ĐƠN GIẢN HÓA: Tick xác nhận đã dạy */}
       {showCalendarModal && (
         <div className="modal" style={{ display: 'flex' }}>
-          <div className="modal-content glass-card" style={{ maxWidth: '800px', width: '95%' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '850px', width: '95%' }}>
             <div className="modal-header">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Calendar className="text-primary" />
-                Lịch Dạy - Lớp {selectedClassId}
+                Lịch Dạy & Ghi Nhận - Lớp {selectedClassId}
               </h3>
               <span className="close-btn" onClick={() => { setShowCalendarModal(false); }}>&times;</span>
             </div>
             
+            {/* Legend */}
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', fontSize: '12px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.3)', border: '1px solid #f59e0b', display: 'inline-block' }}></span> Chờ xác nhận</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.3)', border: '1px solid #10b981', display: 'inline-block' }}></span> Đã dạy</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', border: '1px solid #ef4444', display: 'inline-block' }}></span> Vắng có phép / GS nghỉ</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(100,100,100,0.2)', border: '1px solid #666', display: 'inline-block' }}></span> Đã hủy</span>
+            </div>
+
             {/* Calendar Controls */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <button className="btn btn-sm btn-secondary" onClick={handlePrevMonth}>&larr; Tháng trước</button>
               <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
                 Tháng {calendarMonth + 1} / {calendarYear}
@@ -1132,9 +841,8 @@ function TutorDashboard() {
             ) : (
               <div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '15px' }}>
-                  💡 Click vào ô ngày trống để <strong>Đăng ký buổi dạy mới</strong>. Click vào thẻ buổi dạy (chưa hủy) để thực hiện <strong>Hủy lịch</strong>.
+                  💡 Click vào ô <strong style={{color:'#f59e0b'}}>vàng (Chờ xác nhận)</strong> để ghi nhận <strong>Đã dạy</strong>.
                 </p>
-                {/* Lưới các thứ trong tuần */}
                 <div className="calendar-grid">
                   <div className="calendar-header-day">Thứ 2</div>
                   <div className="calendar-header-day">Thứ 3</div>
@@ -1142,12 +850,11 @@ function TutorDashboard() {
                   <div className="calendar-header-day">Thứ 5</div>
                   <div className="calendar-header-day">Thứ 6</div>
                   <div className="calendar-header-day">Thứ 7</div>
-                  <div className="calendar-header-day">Chủ Nhật</div>
+                  <div className="calendar-header-day">CN</div>
                 </div>
 
-                {/* Ô lịch */}
                 <div className="calendar-grid">
-                  {cells.map((cell, idx) => {
+                  {cells.map((cell) => {
                     if (cell.isPadding) {
                       return <div key={cell.key} className="calendar-cell padding" />;
                     }
@@ -1157,76 +864,49 @@ function TutorDashboard() {
                                     new Date().getFullYear() === calendarYear;
 
                     return (
-                      <div 
-                        key={cell.key} 
-                        className={`calendar-cell ${isToday ? 'today' : ''}`}
-                        onClick={(e) => {
-                          if (e.target.closest('.calendar-session-badge')) {
-                            return;
-                          }
-                          // Do not allow registration on past dates
-                          const todayStr = new Date().toISOString().split('T')[0];
-                          if (cell.dateStr < todayStr) {
-                            return;
-                          }
-                          setSelectedDate(cell.dateStr);
-                          setShowAddSessionModal(true);
-                        }}
-                      >
+                      <div key={cell.key} className={`calendar-cell ${isToday ? 'today' : ''}`}>
                         <div className={`calendar-day-number ${isToday ? 'today' : ''}`}>{cell.day}</div>
                         <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
                           {cell.daySessions.map(session => {
-                            const startTime = session.giobatdau.substring(0, 5);
-                            const endTime = session.gioketthuc.substring(0, 5);
-                            const curTodayStr = new Date().toISOString().split('T')[0];
-                            
-                            let badgeClass = 'status-daday';
-                            let statusLabel = 'Đã dạy';
+                            let badgeClass = '';
+                            let statusLabel = '';
+                            let clickable = false;
 
-                            if (session.trangthai === 'DaDay') {
-                              if (cell.dateStr >= curTodayStr) {
-                                badgeClass = 'status-dadangky';
-                                statusLabel = 'Đã đăng ký';
-                              } else {
-                                badgeClass = 'status-daday';
-                                statusLabel = 'Đã dạy';
-                              }
+                            if (session.trangthai === 'ChoXacNhan') {
+                              badgeClass = 'status-choxacnhan';
+                              statusLabel = `${caHocLabel(session.cahoc)} - Chờ xác nhận`;
+                              clickable = true;
+                            } else if (session.trangthai === 'DaDay') {
+                              badgeClass = 'status-daday';
+                              statusLabel = `${caHocLabel(session.cahoc)} - ✓ Đã dạy`;
+                            } else if (session.trangthai === 'HVXinNghi') {
+                              badgeClass = 'status-choxacnhan';
+                              statusLabel = `${caHocLabel(session.cahoc)} - HV xin nghỉ`;
+                            } else if (session.trangthai === 'GSXinNghi') {
+                              badgeClass = 'status-choxacnhan';
+                              statusLabel = `${caHocLabel(session.cahoc)} - GS xin nghỉ`;
                             } else if (session.trangthai === 'HVVangCoPhep') {
-                              badgeClass = 'status-vangcp';
-                              statusLabel = 'Vắng CP';
-                            } else if (session.trangthai === 'HVVangKhongPhep') {
-                              badgeClass = 'status-vangkp';
-                              statusLabel = 'Vắng KP';
+                              badgeClass = 'status-vang';
+                              statusLabel = `${caHocLabel(session.cahoc)} - HV vắng`;
                             } else if (session.trangthai === 'GSNghi') {
-                              badgeClass = 'status-gsnghi';
-                              statusLabel = 'GS Nghi';
+                              badgeClass = 'status-vang';
+                              statusLabel = `${caHocLabel(session.cahoc)} - GS nghỉ`;
                             } else if (session.trangthai === 'Huy') {
                               badgeClass = 'status-huy';
-                              statusLabel = 'Đã hủy';
+                              statusLabel = `${caHocLabel(session.cahoc)} - Hủy`;
                             }
 
                             return (
                               <div
                                 key={session.mabuoi}
                                 className={`calendar-session-badge ${badgeClass}`}
-                                title={`${startTime} - ${endTime}: ${statusLabel}${session.noidung ? ` (${session.noidung})` : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (session.trangthai !== 'Huy') {
-                                    handleCancelSession(session.mabuoi);
-                                  } else {
-                                    Swal.fire({
-                                      title: 'Thông báo',
-                                      text: 'Buổi học này đã được hủy trước đó.',
-                                      icon: 'info',
-                                      background: '#1e293b',
-                                      color: '#fff'
-                                    });
-                                  }
+                                title={session.noidung || statusLabel}
+                                onClick={() => {
+                                  if (clickable) handleConfirmSession(session);
                                 }}
-                                style={{ cursor: session.trangthai !== 'Huy' ? 'pointer' : 'default' }}
+                                style={{ cursor: clickable ? 'pointer' : 'default' }}
                               >
-                                {startTime} {statusLabel}
+                                {statusLabel}
                               </div>
                             );
                           })}
@@ -1241,63 +921,13 @@ function TutorDashboard() {
         </div>
       )}
 
-      {/* Add Session Modal from Calendar */}
-      {showAddSessionModal && (
-        <div className="modal" style={{ display: 'flex', zIndex: 300 }}>
-          <div className="modal-content glass-card" style={{ maxWidth: '450px' }}>
-            <div className="modal-header">
-              <h3>Đăng Ký Buổi Dạy Mới</h3>
-              <span className="close-btn" onClick={() => { setShowAddSessionModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
-            </div>
-            {modalMsg.text && (
-              <div style={{ backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, padding: '10px', borderRadius: '6px', marginBottom: '15px' }}>
-                {modalMsg.text}
-              </div>
-            )}
-            <form onSubmit={handleCreateSessionCalendar}>
-              <div className="form-group">
-                <label>Ngày dạy</label>
-                <input type="text" name="ngayday" value={selectedDate} readOnly style={{ opacity: 0.8, cursor: 'not-allowed' }} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-group">
-                  <label>Giờ bắt đầu *</label>
-                  <input type="time" name="giobatdau" required defaultValue="18:00" />
-                </div>
-                <div className="form-group">
-                  <label>Giờ kết thúc *</label>
-                  <input type="time" name="gioketthuc" required defaultValue="20:00" />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-group">
-                  <label>Số giờ dạy (Ví dụ: 2)</label>
-                  <input type="number" name="sogio" step="0.5" defaultValue="2" />
-                </div>
-                <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '12px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, fontSize: '13px' }}>
-                    <input type="checkbox" name="repeat" defaultChecked style={{ width: 'auto' }} />
-                    <span>Lặp lại hàng tuần đến hết khóa</span>
-                  </label>
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Nội dung bài học / Ghi chú</label>
-                <textarea name="noidung" rows="3" placeholder="Ví dụ: Dạy bài hàm số mũ..."></textarea>
-              </div>
-              <button type="submit" className="btn btn-primary btn-block">Đăng ký buổi dạy</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       <style>{`
         .calendar-grid {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
-          gap: 8px;
-          margin-top: 10px;
-          margin-bottom: 10px;
+          gap: 6px;
+          margin-top: 8px;
+          margin-bottom: 8px;
         }
         .calendar-header-day {
           text-align: center;
@@ -1309,26 +939,22 @@ function TutorDashboard() {
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
         .calendar-cell {
-          min-height: 100px;
+          min-height: 90px;
           border: 1px solid var(--glass-border);
           border-radius: 8px;
-          padding: 8px;
+          padding: 6px;
           background: rgba(255, 255, 255, 0.01);
           display: flex;
           flex-direction: column;
-          justify-content: flex-start;
           transition: var(--transition-smooth);
-          cursor: pointer;
           position: relative;
         }
         .calendar-cell:hover {
           background: rgba(255, 255, 255, 0.04);
-          border-color: var(--color-primary);
         }
         .calendar-cell.padding {
           background: transparent;
           border-color: transparent;
-          cursor: default;
           pointer-events: none;
         }
         .calendar-cell.today {
@@ -1339,59 +965,50 @@ function TutorDashboard() {
           font-size: 13px;
           font-weight: 600;
           color: var(--text-muted);
-          margin-bottom: 6px;
+          margin-bottom: 4px;
         }
         .calendar-day-number.today {
           color: var(--color-teal);
           font-weight: 800;
         }
         .calendar-session-badge {
-          font-size: 10px;
-          padding: 3px 6px;
+          font-size: 9px;
+          padding: 3px 5px;
           border-radius: 4px;
-          margin-top: 4px;
+          margin-top: 3px;
           display: block;
           text-align: center;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
           transition: var(--transition-smooth);
-          font-weight: 500;
+          font-weight: 600;
+        }
+        .calendar-session-badge.status-choxacnhan {
+          background: rgba(245, 158, 11, 0.2);
+          color: #f59e0b;
+          border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+        .calendar-session-badge.status-choxacnhan:hover {
+          background: rgba(245, 158, 11, 0.35);
+          transform: scale(1.03);
         }
         .calendar-session-badge.status-daday {
-          background: rgba(16, 185, 129, 0.15);
-          color: var(--color-success);
-          border: 1px solid rgba(16, 185, 129, 0.3);
+          background: rgba(16, 185, 129, 0.2);
+          color: #10b981;
+          border: 1px solid rgba(16, 185, 129, 0.4);
         }
-        .calendar-session-badge.status-dadangky {
-          background: rgba(99, 102, 241, 0.15);
-          color: hsla(235, 90%, 75%, 1);
-          border: 1px solid rgba(99, 102, 241, 0.3);
-        }
-        .calendar-session-badge.status-vangcp {
-          background: rgba(59, 130, 246, 0.15);
-          color: var(--color-info);
-          border: 1px solid rgba(59, 130, 246, 0.3);
-        }
-        .calendar-session-badge.status-vangkp {
-          background: rgba(245, 158, 11, 0.15);
-          color: var(--color-warning);
-          border: 1px solid rgba(245, 158, 11, 0.3);
-        }
-        .calendar-session-badge.status-gsnghi {
-          background: rgba(139, 92, 246, 0.15);
-          color: hsla(250, 95%, 75%, 1);
-          border: 1px solid rgba(139, 92, 246, 0.3);
+        .calendar-session-badge.status-vang {
+          background: rgba(239, 68, 68, 0.2);
+          color: #ef4444;
+          border: 1px solid rgba(239, 68, 68, 0.4);
         }
         .calendar-session-badge.status-huy {
-          background: rgba(239, 68, 68, 0.08);
-          color: var(--color-danger);
-          border: 1px solid rgba(239, 68, 68, 0.15);
+          background: rgba(100, 100, 100, 0.15);
+          color: #888;
+          border: 1px solid rgba(100, 100, 100, 0.3);
           text-decoration: line-through;
           opacity: 0.6;
-        }
-        .calendar-session-badge:hover {
-          transform: scale(1.02);
         }
       `}</style>
     </div>

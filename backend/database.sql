@@ -19,6 +19,18 @@ DROP TABLE IF EXISTS NHANVIEN CASCADE;
 DROP TABLE IF EXISTS GIASU CASCADE;
 DROP TABLE IF EXISTS HOCVIEN CASCADE;
 DROP TABLE IF EXISTS TAIKHOAN CASCADE;
+DROP TABLE IF EXISTS THAMSO CASCADE;
+
+-- ============================================================
+-- CẤU HÌNH HỆ THỐNG
+-- ============================================================
+CREATE TABLE THAMSO (
+  MaTS          VARCHAR(50) PRIMARY KEY,
+  TenTS         VARCHAR(100) NOT NULL,
+  GiaTri        VARCHAR(255) NOT NULL
+);
+
+INSERT INTO THAMSO (MaTS, TenTS, GiaTri) VALUES ('TyLeHHMacDinh', 'Tỷ lệ hoa hồng mặc định (%)', '70.00');
 
 -- ============================================================
 -- NHÓM 1: QUẢN LÝ NGƯỜI DÙNG
@@ -136,7 +148,8 @@ CREATE TABLE YEUCAUHOCKEM (
   HinhThucHoc       VARCHAR(30),
   YC_GioiTinhGS     VARCHAR(50),
   YC_TrinhDoGS      VARCHAR(100),
-  ThoiGianMongMuon  VARCHAR(300)   NOT NULL,
+  SoNgayHoc         INT            NOT NULL DEFAULT 20 CHECK (SoNgayHoc > 0),
+  LichHocTrongTuan  VARCHAR(500)   NOT NULL DEFAULT '[]',
   DiaChi            VARCHAR(255),
   GhiChu            VARCHAR(500),
   TrangThai         VARCHAR(30)    NOT NULL DEFAULT 'ChoGhep' CHECK (TrangThai IN ('ChoGhep','DaGhep','Huy')),
@@ -170,14 +183,12 @@ CREATE TABLE BUOIDAY (
   MaBuoi          SERIAL PRIMARY KEY,
   MaLop           INT            NOT NULL REFERENCES LOP(MaLop) ON DELETE CASCADE,
   NgayDay         DATE           NOT NULL,
-  GioBatDau       TIME           NOT NULL,
-  GioKetThuc      TIME           NOT NULL CHECK (GioKetThuc > GioBatDau),
-  SoGio           DECIMAL(4,1),
-  TrangThai       VARCHAR(30)    NOT NULL DEFAULT 'DaDay' CHECK (TrangThai IN ('DaDay','HVVangCoPhep','HVVangKhongPhep','GSNghi','Huy')),
+  CaHoc           VARCHAR(10)    NOT NULL CHECK (CaHoc IN ('Sang','Chieu','Toi')),
+  TrangThai       VARCHAR(30)    NOT NULL DEFAULT 'ChoXacNhan' CHECK (TrangThai IN ('ChoXacNhan','DaDay','HVVangCoPhep','GSNghi','Huy','HVXinNghi','GSXinNghi')),
   NoiDung         VARCHAR(300),
   NhanXetHV       VARCHAR(300),
   ThoiGianXacNhan TIMESTAMP,
-  UNIQUE (MaLop, NgayDay, GioBatDau)
+  UNIQUE (MaLop, NgayDay, CaHoc)
 );
 CREATE INDEX idx_bd_lop_ngay ON BUOIDAY(MaLop, NgayDay);
 
@@ -210,7 +221,7 @@ CREATE TABLE HOCHPHI (
   NgayNop         DATE,
   HinhThucTT      VARCHAR(20)  CHECK (HinhThucTT IN ('TienMat','ChuyenKhoan')),
   NguoiThu        INT REFERENCES NHANVIEN(MaNV) ON DELETE SET NULL,
-  TrangThai       VARCHAR(15)  NOT NULL DEFAULT 'ChuaNop' CHECK (TrangThai IN ('ChuaNop','DaNop','QuaHan')),
+  TrangThai       VARCHAR(15)  NOT NULL DEFAULT 'ChuaNop' CHECK (TrangThai IN ('ChuaNop','DaNop','QuaHan','ChoXacNhan')),
   GhiChu          VARCHAR(300),
   UNIQUE (MaLop, KyTT_Tu, KyTT_Den),
   CHECK (TongHocPhi = SoBuoi * HocPhiMoiBuoi)

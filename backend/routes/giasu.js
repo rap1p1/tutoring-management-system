@@ -237,7 +237,7 @@ router.get('/lop', async (req, res) => {
     const mags = gsR.rows[0].mags;
 
     const r = await pool(req).query(
-      `SELECT l.*, mh.tenmh, hv.hoten AS tenhocvien, yc.caplop, yc.diachi, yc.thoigianmongmuon
+      `SELECT l.*, mh.tenmh, hv.hoten AS tenhocvien, yc.caplop, yc.diachi, yc.songayhoc, yc.lichhoctrongtuan
        FROM lop l
        JOIN yeucauhockem yc ON yc.mayc = l.mayc
        JOIN hocvien hv ON hv.mahv = yc.mahv
@@ -297,20 +297,43 @@ router.post('/xinnghi', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
-// Xin nghỉ 1 buổi
+// Xin nghỉ 1 buổi (ĐƠN GIẢN HÓA: dùng CaHoc thay vì giờ cụ thể)
 router.post('/xinnghibuoi', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const { malop, ngayday, giobatdau, gioketthuc, lydo } = req.body;
-    if (!malop || !ngayday || !giobatdau || !gioketthuc || !lydo) return res.json({ success: false, message: 'Thiếu thông tin' });
+    const { malop, ngayday, cahoc, lydo } = req.body;
+    if (!malop || !ngayday || !cahoc || !lydo) return res.json({ success: false, message: 'Thiếu thông tin' });
+    
+    if (!['Sang', 'Chieu', 'Toi'].includes(cahoc)) {
+      return res.json({ success: false, message: 'Ca học không hợp lệ' });
+    }
+    
+    // Kiểm tra xem buổi đó đã tồn tại chưa (trạng thái ChoXacNhan)
+    const existingSession = await pool(req).query(
+      "SELECT mabuoi, trangthai FROM buoiday WHERE malop = $1 AND ngayday = $2 AND cahoc = $3",
+      [malop, ngayday, cahoc]
+    );
+    
+    if (existingSession.rows.length > 0) {
+      const session = existingSession.rows[0];
+      if (session.trangthai === 'ChoXacNhan') {
+        await pool(req).query(
+          "UPDATE buoiday SET trangthai = 'GSXinNghi', noidung = $1, thoigianxacnhan = NOW() WHERE mabuoi = $2",
+          [lydo, session.mabuoi]
+        );
+        return res.json({ success: true, message: 'Đã gửi yêu cầu xin nghỉ dạy thành công, vui lòng chờ duyệt!' });
+      } else {
+        return res.json({ success: false, message: 'Buổi học này đã được xử lý hoặc đã có yêu cầu khác' });
+      }
+    }
     
     await pool(req).query(
-      "INSERT INTO buoiday(malop, ngayday, giobatdau, gioketthuc, trangthai, noidung) VALUES($1, $2, $3, $4, 'GSNghi', $5)",
-      [malop, ngayday, giobatdau, gioketthuc, lydo]
+      "INSERT INTO buoiday(malop, ngayday, cahoc, trangthai, noidung) VALUES($1, $2, $3, 'GSXinNghi', $4)",
+      [malop, ngayday, cahoc, lydo]
     );
-    res.json({ success: true, message: 'Đã báo nghỉ thành công' });
+    res.json({ success: true, message: 'Đã gửi yêu cầu xin nghỉ dạy thành công, vui lòng chờ duyệt!' });
   } catch (e) { 
-    if (e.code === '23505') return res.json({ success: false, message: 'Buổi học trùng lặp thời gian' });
+    if (e.code === '23505') return res.json({ success: false, message: 'Buổi học trùng lặp' });
     res.json({ success: false, message: e.message }); 
   }
 });

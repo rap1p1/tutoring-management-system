@@ -10,7 +10,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const r = await pool(req).query(
-      `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop, yc.diachi, yc.thoigianmongmuon
+      `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop, yc.diachi, yc.songayhoc, yc.lichhoctrongtuan
        FROM lop l
        JOIN yeucauhockem yc ON yc.mayc = l.mayc
        JOIN hocvien hv ON hv.mahv = yc.mahv
@@ -50,80 +50,56 @@ router.get('/:id/buoiday', async (req, res) => {
   try {
     const { id } = req.params;
     const r = await pool(req).query(
-      'SELECT * FROM buoiday WHERE malop = $1 ORDER BY ngayday DESC, giobatdau DESC', [id]
+      'SELECT * FROM buoiday WHERE malop = $1 ORDER BY ngayday ASC, cahoc ASC', [id]
     );
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
-// Ghi nhận buổi dạy (Gia sư báo cáo)
-router.post('/:id/buoiday', async (req, res) => {
+// Gia sư xác nhận đã dạy 1 buổi (chuyển ChoXacNhan → DaDay)
+router.post('/:id/buoiday/:mabuoi/confirm', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
   try {
-    const { id } = req.params;
-    const { ngayday, giobatdau, gioketthuc, sogio, noidung, nhanxethv, trangthai, repeat } = req.body;
+    const { id, mabuoi } = req.params;
     
-    console.log('[POST buoiday] req.body:', req.body);
-    
-    if (!ngayday || !giobatdau || !gioketthuc || !trangthai) {
-      return res.json({ success: false, message: 'Thiếu thông tin buổi dạy' });
-    }
-    
-    // Kiểm tra xem gia sư này có dạy lớp này không
+    // Kiểm tra gia sư dạy lớp này
     const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
     if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
     const mags = gsR.rows[0].mags;
     
-    const lopR = await pool(req).query('SELECT mags, ngayketthucdukien FROM lop WHERE malop = $1', [id]);
+    const lopR = await pool(req).query('SELECT mags FROM lop WHERE malop = $1', [id]);
     if (!lopR.rows.length) return res.json({ success: false, message: 'Không tìm thấy lớp học' });
     if (lopR.rows[0].mags !== mags) {
       return res.json({ success: false, message: 'Gia sư không dạy lớp này' });
     }
     
-    const calculatedHours = parseFloat(sogio) || 2.0; // default to 2 hours
-    
-    if (repeat) {
-      let endDate = lopR.rows[0].ngayketthucdukien;
-      if (!endDate) {
-        // default to 12 weeks from ngayday
-        const d = new Date(ngayday);
-        d.setDate(d.getDate() + 12 * 7);
-        endDate = d;
-      } else {
-        endDate = new Date(endDate);
-      }
-      
-      let current = new Date(ngayday);
-      let insertedCount = 0;
-      let lastRow = null;
-      
-      while (current <= endDate) {
-        const dateStr = current.toISOString().split('T')[0];
-        const resInsert = await pool(req).query(
-          `INSERT INTO buoiday (malop, ngayday, giobatdau, gioketthuc, sogio, trangthai, noidung, nhanxethv, thoigianxacnhan)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-           ON CONFLICT (malop, ngayday, giobatdau) DO NOTHING RETURNING *`,
-          [id, dateStr, giobatdau, gioketthuc, calculatedHours, trangthai, noidung || null, nhanxethv || null]
-        );
-        if (resInsert.rows.length) {
-          insertedCount++;
-          lastRow = resInsert.rows[0];
-        }
-        current.setDate(current.getDate() + 7);
-      }
-      return res.json({ success: true, data: lastRow, message: `Đã đăng ký ${insertedCount} buổi dạy tuần hoàn thành công cho đến hết khóa học` });
-    }
-
-    const r = await pool(req).query(
-      `INSERT INTO buoiday (malop, ngayday, giobatdau, gioketthuc, sogio, trangthai, noidung, nhanxethv, thoigianxacnhan)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-       ON CONFLICT (malop, ngayday, giobatdau) DO NOTHING RETURNING *`,
-      [id, ngayday, giobatdau, gioketthuc, calculatedHours, trangthai, noidung || null, nhanxethv || null]
+    // Kiểm tra buổi dạy
+    const buoiR = await pool(req).query(
+      "SELECT * FROM buoiday WHERE mabuoi = $1 AND malop = $2", [mabuoi, id]
     );
-    if (!r.rows.length) {
-      return res.json({ success: false, message: 'Buổi dạy vào ngày giờ này đã tồn tại!' });
+    if (!buoiR.rows.length) return res.json({ success: false, message: 'Không tìm thấy buổi dạy' });
+    if (buoiR.rows[0].trangthai !== 'ChoXacNhan') {
+      return res.json({ success: false, message: 'Buổi dạy này đã được xử lý trước đó (trạng thái: ' + buoiR.rows[0].trangthai + ')' });
     }
-    res.json({ success: true, data: r.rows[0], message: 'Ghi nhận buổi dạy thành công' });
+    
+    try {
+      await pool(req).query('BEGIN');
+      await pool(req).query(
+        "UPDATE buoiday SET trangthai = 'DaDay', thoigianxacnhan = NOW() WHERE mabuoi = $1",
+        [mabuoi]
+      );
+      await pool(req).query(
+        `UPDATE yeucauhockem 
+         SET songayhoc = songayhoc + 1 
+         WHERE mayc = (SELECT mayc FROM lop WHERE malop = $1)`,
+        [id]
+      );
+      await pool(req).query('COMMIT');
+      res.json({ success: true, message: 'Ghi nhận đã dạy thành công' });
+    } catch (e) {
+      await pool(req).query('ROLLBACK');
+      res.json({ success: false, message: e.message });
+    }
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 

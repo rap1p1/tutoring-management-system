@@ -14,7 +14,7 @@ function isStaff(req, res, next) {
 }
 
 function requireOps(req, res, next) {
-  if (!['SA', 'NVQL'].includes(auth(req).vaitro)) {
+  if (!['SA', 'NVQL', 'BGD'].includes(auth(req).vaitro)) {
     return res.json({ success: false, message: 'Vai trò của bạn không có quyền thực hiện thao tác nghiệp vụ này' });
   }
   next();
@@ -55,11 +55,17 @@ router.get('/stats', async (req, res) => {
 router.get('/revenue-chart', async (req, res) => {
   try {
     const q = `
-      SELECT TO_CHAR(ngaynop, 'MM/YYYY') as month, SUM(tonghocphi) as revenue 
-      FROM hochphi 
-      WHERE trangthai = 'DaNop' 
-      GROUP BY TO_CHAR(NgayNop, 'MM/YYYY'), TO_CHAR(NgayNop, 'YYYY-MM')
-      ORDER BY TO_CHAR(NgayNop, 'YYYY-MM') ASC
+      SELECT 
+        TO_CHAR(hp.ngaynop, 'MM/YYYY') as month, 
+        SUM(hp.tonghocphi) as revenue,
+        SUM(hp.tonghocphi - COALESCE(hh.tonghoahong, 0)) as profit
+      FROM hochphi hp
+      LEFT JOIN hoahong hh ON hh.malop = hp.malop 
+                          AND hh.kytt_tu = hp.kytt_tu 
+                          AND hh.kytt_den = hp.kytt_den
+      WHERE hp.trangthai = 'DaNop' 
+      GROUP BY TO_CHAR(hp.ngaynop, 'MM/YYYY'), TO_CHAR(hp.ngaynop, 'YYYY-MM')
+      ORDER BY TO_CHAR(hp.ngaynop, 'YYYY-MM') ASC
       LIMIT 12
     `;
     const r = await pool(req).query(q);
@@ -137,10 +143,21 @@ router.post('/giasu/:id/duyet', requireOps, async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
-// Lấy toàn bộ gia sư
+// Lấy toàn bộ gia sư kèm lịch rảnh
 router.get('/giasu', async (req, res) => {
   try {
-    const r = await pool(req).query("SELECT * FROM giasu ORDER BY hoten");
+    const q = `
+      SELECT gs.*, 
+             COALESCE(
+               (SELECT json_agg(json_build_object('thu', lr.thutrongtuan, 'buoi', lr.cahoc)) 
+                FROM lichranh_giasu lr 
+                WHERE lr.mags = gs.mags), 
+               '[]'::json
+             ) as lichranh
+      FROM giasu gs
+      ORDER BY gs.hoten
+    `;
+    const r = await pool(req).query(q);
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
@@ -158,16 +175,107 @@ router.get('/yeucau', async (req, res) => {
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
-// Tạo lớp mới từ yêu cầu học kèm và phân công gia sư
+
+// ============================================================
+// HÀM HELPER: Tự động sinh danh sách buổi dạy
+// ============================================================
+function generateSessions(ngaybatdau, soNgayHoc, lichHocTrongTuan) {
+  // lichHocTrongTuan = [{"thu":2,"buoi":"Sang"}, {"thu":4,"buoi":"Chieu"}]
+  // Mapping: thu 2=Mon, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Sat, 8=Sun
+  // JS getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  const thuToJsDay = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 0 };
+  
+  const sessions = [];
+  const startDate = new Date(ngaybatdau);
+  let currentDate = new Date(startDate);
+  let count = 0;
+  
+  // Tạo set các ngày trong tuần cần học
+  const scheduleDays = lichHocTrongTuan.map(item => ({
+    jsDay: thuToJsDay[item.thu],
+    buoi: item.buoi
+  }));
+  
+  // Lặp tối đa 365 ngày để tránh vòng lặp vô hạn
+  const maxIterations = 365;
+  let iteration = 0;
+  
+  while (count < soNgayHoc && iteration < maxIterations) {
+    const dayOfWeek = currentDate.getDay();
+    
+    // Kiểm tra xem ngày hiện tại có trong lịch học không
+    for (const sched of scheduleDays) {
+      if (dayOfWeek === sched.jsDay && count < soNgayHoc) {
+        const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+        sessions.push({
+          ngayday: dateStr,
+          cahoc: sched.buoi
+        });
+        count++;
+      }
+    }
+    
+    currentDate.setDate(currentDate.getDate() + 1);
+    iteration++;
+  }
+  
+  return sessions;
+}
+
+// Tạo lớp mới từ yêu cầu học kèm và phân công gia sư (TỰ ĐỘNG SINH BUỔI DẠY)
 router.post('/lop/create', requireOps, async (req, res) => {
   const client = await pool(req).connect();
   try {
     const { mayc, mags, ngaybatdau, ngaykethucdukien, hocphimoibuoi, tylehh, noidung, diadiem, hinhthuchoc } = req.body;
     const parsedMaGS = parseInt(mags);
-    if (!mayc || isNaN(parsedMaGS) || !ngaybatdau || !hocphimoibuoi) {
+    if (!mayc || isNaN(parsedMaGS)) {
       return res.json({ success: false, message: 'Thiếu thông tin bắt buộc hoặc mã gia sư không hợp lệ để tạo lớp' });
     }
+
+    // Lấy thông tin yêu cầu học kèm (để lấy số ngày + lịch học + cấp lớp)
+    const ycR = await client.query('SELECT songayhoc, lichhoctrongtuan, caplop FROM yeucauhockem WHERE mayc = $1', [mayc]);
+    if (!ycR.rows.length) {
+      return res.json({ success: false, message: 'Không tìm thấy yêu cầu học kèm' });
+    }
+    const caplop = ycR.rows[0].caplop;
+
+    // Lấy học phí mặc định từ DB
+    const getDbDefaultHocPhi = async (cap) => {
+      let key = 'HocPhi_Khac';
+      if (cap === 'Cấp 1') key = 'HocPhi_Cap1';
+      else if (cap === 'Cấp 2') key = 'HocPhi_Cap2';
+      else if (cap === 'Cấp 3') key = 'HocPhi_Cap3';
+      else if (cap === 'Luyện thi Đại học') key = 'HocPhi_LuyenThiDH';
+      else if (cap === 'Tiếng Anh Giao tiếp') key = 'HocPhi_TiengAnhGT';
+      else if (cap === 'Chứng chỉ Quốc tế') key = 'HocPhi_ChungChiQT';
+
+      const r = await client.query('SELECT giatri FROM thamso WHERE mats = $1', [key]);
+      return r.rows.length ? parseInt(r.rows[0].giatri) : 250000;
+    };
+
+    const defaultHocPhi = await getDbDefaultHocPhi(caplop);
+    let finalHocPhi = defaultHocPhi;
+    if (auth(req).vaitro === 'BGD' && hocphimoibuoi !== undefined && hocphimoibuoi !== '') {
+      const parsedVal = parseInt(hocphimoibuoi);
+      if (!isNaN(parsedVal) && parsedVal > 0) {
+        finalHocPhi = parsedVal;
+      }
+    }
     
+    // Lấy tỷ lệ hoa hồng mặc định từ THAMSO
+    const tsR = await client.query("SELECT giatri FROM thamso WHERE mats = 'TyLeHHMacDinh'");
+    const defaultTyLe = tsR.rows.length ? parseFloat(tsR.rows[0].giatri) : 70.00;
+
+    let finalTyLe = defaultTyLe;
+    if (auth(req).vaitro === 'BGD' && tylehh !== undefined && tylehh !== '') {
+      const parsedVal = parseFloat(tylehh);
+      if (!isNaN(parsedVal) && parsedVal >= 0 && parsedVal <= 100) {
+        finalTyLe = parsedVal;
+      }
+    }
+
+    const start = ngaybatdau || new Date().toISOString().split('T')[0];
+
     // Lấy mã nhân viên tạo lớp
     const nvR = await client.query('SELECT manv FROM nhanvien WHERE matk = $1', [auth(req).matk]);
     const manv = nvR.rows.length ? nvR.rows[0].manv : null;
@@ -176,6 +284,16 @@ router.post('/lop/create', requireOps, async (req, res) => {
     const gsCheck = await client.query("SELECT mags FROM giasu WHERE mags = $1 AND trangthaihoso = 'DaDuyet'", [parsedMaGS]);
     if (!gsCheck.rows.length) {
       return res.json({ success: false, message: 'Mã gia sư không tồn tại hoặc hồ sơ gia sư chưa được duyệt' });
+    }
+    
+    const soNgayHoc = 20;
+    let lichHocTrongTuan;
+    try {
+      lichHocTrongTuan = typeof ycR.rows[0].lichhoctrongtuan === 'string' 
+        ? JSON.parse(ycR.rows[0].lichhoctrongtuan) 
+        : ycR.rows[0].lichhoctrongtuan;
+    } catch (e) {
+      return res.json({ success: false, message: 'Lịch học trong tuần không hợp lệ' });
     }
 
     await client.query('BEGIN');
@@ -188,15 +306,29 @@ router.post('/lop/create', requireOps, async (req, res) => {
         mayc, 
         parsedMaGS, 
         manv, 
-        ngaybatdau, 
+        start, 
         ngaykethucdukien || null, 
         noidung || null, 
         diadiem || null, 
         hinhthuchoc || null, 
-        parseInt(hocphimoibuoi), 
-        parseFloat(tylehh) || 70.00
+        finalHocPhi, 
+        finalTyLe
       ]
     );
+    
+    const malop = lopR.rows[0].malop;
+    
+    // TỰ ĐỘNG SINH BUỔI DẠY
+    const sessions = generateSessions(start, soNgayHoc, lichHocTrongTuan);
+    
+    for (const session of sessions) {
+      await client.query(
+        `INSERT INTO buoiday (malop, ngayday, cahoc, trangthai)
+         VALUES ($1, $2, $3, 'ChoXacNhan')
+         ON CONFLICT (malop, ngayday, cahoc) DO NOTHING`,
+        [malop, session.ngayday, session.cahoc]
+      );
+    }
     
     // Cập nhật trạng thái yêu cầu học kèm thành DaGhep
     await client.query(
@@ -205,7 +337,7 @@ router.post('/lop/create', requireOps, async (req, res) => {
     );
     
     await client.query('COMMIT');
-    res.json({ success: true, data: lopR.rows[0], message: 'Tạo lớp và phân công thành công' });
+    res.json({ success: true, data: lopR.rows[0], message: 'Đã ghép lớp thành công' });
   } catch (e) {
     await client.query('ROLLBACK');
     res.json({ success: false, message: e.message });
@@ -294,12 +426,10 @@ router.post('/hoahong/generate', requireOps, async (req, res) => {
       return res.json({ success: false, message: 'Thiếu thông tin tạo hoa hồng' });
     }
     
-    // Tính toán số tiền gia sư được nhận (hoặc hoa hồng trả lại cho trung tâm)
-    // Theo DB, TongHoaHong = SoBuoiDaDay * HocPhiHVMoiBuoi * (TyLeHH / 100)
     const tonghoahong = Math.round(parseInt(sobuoida_day) * parseInt(hocphihvmoibuoi) * (parseFloat(tylehh) / 100.0));
     
     const r = await pool(req).query(
-      `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoida_day, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
+      `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoidaday, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT') RETURNING *`,
       [mags, malop, kytt_tu, kytt_den, parseInt(sobuoida_day), parseInt(hocphihvmoibuoi), parseFloat(tylehh), tonghoahong]
     );
@@ -364,36 +494,235 @@ router.get('/yeucaudoi', async (req, res) => {
 
 // Xử lý yêu cầu đổi gia sư / báo nghỉ
 router.post('/yeucaudoi/:id/xuly', requireOps, async (req, res) => {
+  const client = await pool(req).connect();
   try {
     const { id } = req.params;
-    const nvR = await pool(req).query('SELECT manv FROM nhanvien WHERE matk = $1', [auth(req).matk]);
+    const nvR = await client.query('SELECT manv FROM nhanvien WHERE matk = $1', [auth(req).matk]);
     const manv = nvR.rows.length ? nvR.rows[0].manv : null;
+
+    const reqInfo = await client.query('SELECT malop, lydo, trangthai FROM yeucaudoigiasu WHERE maycdg = $1', [id]);
+    if (!reqInfo.rows.length) {
+      return res.json({ success: false, message: 'Yêu cầu không tồn tại' });
+    }
+    const rInfo = reqInfo.rows[0];
+    if (rInfo.trangthai === 'DaXuLy') {
+      return res.json({ success: false, message: 'Yêu cầu này đã được xử lý trước đó' });
+    }
+
+    const classId = rInfo.malop;
+    const lydoKetThuc = rInfo.lydo || 'Nghỉ dạy/học theo yêu cầu đổi gia sư/nghỉ lớp';
+
+    // Lấy thông tin lớp
+    const lopR = await client.query(
+      `SELECT l.*, yc.mahv, yc.songayhoc
+       FROM lop l
+       JOIN yeucauhockem yc ON yc.mayc = l.mayc
+       WHERE l.malop = $1`,
+      [classId]
+    );
+    if (!lopR.rows.length) {
+      return res.json({ success: false, message: 'Không tìm thấy lớp học liên quan' });
+    }
+    const lop = lopR.rows[0];
+
+    // Đếm số buổi theo trạng thái
+    const statsR = await client.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE trangthai = 'DaDay') as count_daday,
+        COUNT(*) FILTER (WHERE trangthai = 'HVVangCoPhep') as count_vangcophep,
+        COUNT(*) FILTER (WHERE trangthai = 'GSNghi') as count_gsnghi,
+        MIN(ngayday) as ngay_dau,
+        MAX(ngayday) as ngay_cuoi
+      FROM buoiday WHERE malop = $1
+    `, [classId]);
     
-    await pool(req).query(
+    const stats = statsR.rows[0];
+    const soBuoiDaDay = parseInt(stats.count_daday) || 0;
+    const soBuoiVangCoPhep = parseInt(stats.count_vangcophep) || 0;
+    const soBuoiGSNghi = parseInt(stats.count_gsnghi) || 0;
+    const soBuoiTinhPhi = soBuoiDaDay;
+
+    await client.query('BEGIN');
+
+    // Cập nhật trạng thái yêu cầu
+    await client.query(
       `UPDATE yeucaudoigiasu 
        SET trangthai = 'DaXuLy', ngayxuly = NOW(), manv_xuly = $1
        WHERE maycdg = $2`,
       [manv, id]
     );
-    res.json({ success: true, message: 'Đã đánh dấu xử lý thành công' });
-  } catch (e) { res.json({ success: false, message: e.message }); }
+
+    // Cập nhật trạng thái lớp thành KetThuc
+    await client.query(
+      `UPDATE lop 
+       SET trangthai = 'KetThuc', ngayketthucthucte = NOW(), lydoketthucsom = $1
+       WHERE malop = $2`,
+      [lydoKetThuc, classId]
+    );
+
+    // Hủy tất cả buổi chưa hoàn thành
+    await client.query(
+      "UPDATE buoiday SET trangthai = 'Huy' WHERE malop = $1 AND trangthai IN ('ChoXacNhan', 'HVXinNghi', 'GSXinNghi')",
+      [classId]
+    );
+
+    // Tự động tạo hóa đơn học phí nếu có buổi đã dạy
+    if (soBuoiTinhPhi > 0 && lop.mahv) {
+      const kyTuNgay = stats.ngay_dau || lop.ngaybatdau;
+      const kyDenNgay = stats.ngay_cuoi || new Date().toISOString().split('T')[0];
+      const tongHocPhi = soBuoiTinhPhi * parseInt(lop.hocphimoibuoi);
+      
+      await client.query(
+        `INSERT INTO hochphi (malop, mahv, kytt_tu, kytt_den, sobuoi, hocphimoibuoi, tonghocphi, trangthai, ghichu)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'ChuaNop', $8)`,
+        [classId, lop.mahv, kyTuNgay, kyDenNgay, soBuoiTinhPhi, parseInt(lop.hocphimoibuoi), tongHocPhi, `Tự động tạo khi duyệt đơn xin nghỉ lớp. Buổi đã dạy: ${soBuoiDaDay}, Vắng có phép: ${soBuoiVangCoPhep}, GS nghỉ: ${soBuoiGSNghi}`]
+      );
+      
+      // Tự động tạo hoa hồng cho gia sư
+      if (lop.mags) {
+        const tyLeHH = parseFloat(lop.tylehhgiasu) || 70.00;
+        const tongHoaHong = Math.round(soBuoiTinhPhi * parseInt(lop.hocphimoibuoi) * (tyLeHH / 100.0));
+        
+        await client.query(
+          `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoidaday, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT')`,
+          [lop.mags, classId, kyTuNgay, kyDenNgay, soBuoiTinhPhi, parseInt(lop.hocphimoibuoi), tyLeHH, tongHoaHong]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Đã duyệt yêu cầu và chốt kết thúc lớp thành công' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.json({ success: false, message: e.message });
+  } finally {
+    client.release();
+  }
 });
 
-// Kết thúc lớp sớm
+// ============================================================
+// KẾT THÚC LỚP SỚM + TỰ ĐỘNG TẠO HÓA ĐƠN & HOA HỒNG
+// ============================================================
 router.post('/lop/:id/ketthuc', requireOps, async (req, res) => {
+  const client = await pool(req).connect();
   try {
     const { id } = req.params;
     const { lydo } = req.body;
-    const r = await pool(req).query(
+    
+    // Lấy thông tin lớp
+    const lopR = await client.query(
+      `SELECT l.*, yc.mahv, yc.songayhoc
+       FROM lop l
+       JOIN yeucauhockem yc ON yc.mayc = l.mayc
+       WHERE l.malop = $1`,
+      [id]
+    );
+    if (!lopR.rows.length) return res.json({ success: false, message: 'Không tìm thấy lớp học' });
+    
+    const lop = lopR.rows[0];
+    
+    // Đếm số buổi theo trạng thái
+    const statsR = await client.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE trangthai = 'DaDay') as count_daday,
+        COUNT(*) FILTER (WHERE trangthai = 'HVVangCoPhep') as count_vangcophep,
+        COUNT(*) FILTER (WHERE trangthai = 'GSNghi') as count_gsnghi,
+        MIN(ngayday) as ngay_dau,
+        MAX(ngayday) as ngay_cuoi
+      FROM buoiday WHERE malop = $1
+    `, [id]);
+    
+    const stats = statsR.rows[0];
+    const soBuoiDaDay = parseInt(stats.count_daday) || 0;
+    const soBuoiVangCoPhep = parseInt(stats.count_vangcophep) || 0;
+    const soBuoiGSNghi = parseInt(stats.count_gsnghi) || 0;
+    const soBuoiTinhPhi = soBuoiDaDay; // Chỉ tính buổi đã dạy
+    
+    await client.query('BEGIN');
+    
+    // Cập nhật trạng thái lớp
+    await client.query(
       `UPDATE lop 
        SET trangthai = 'KetThuc', ngayketthucthucte = NOW(), lydoketthucsom = $1
        WHERE malop = $2`,
       [lydo || 'Kết thúc sớm theo yêu cầu', id]
     );
-    if (r.rowCount === 0) {
-      return res.json({ success: false, message: 'Không tìm thấy lớp học' });
+    
+    // Hủy tất cả buổi chưa hoàn thành còn lại
+    await client.query(
+      "UPDATE buoiday SET trangthai = 'Huy' WHERE malop = $1 AND trangthai IN ('ChoXacNhan', 'HVXinNghi', 'GSXinNghi')",
+      [id]
+    );
+    
+    // Tự động tạo hóa đơn học phí nếu có buổi đã dạy
+    let hocphiCreated = null;
+    let hoahongCreated = null;
+    
+    if (soBuoiTinhPhi > 0 && lop.mahv) {
+      const kyTuNgay = stats.ngay_dau || lop.ngaybatdau;
+      const kyDenNgay = stats.ngay_cuoi || new Date().toISOString().split('T')[0];
+      const tongHocPhi = soBuoiTinhPhi * parseInt(lop.hocphimoibuoi);
+      
+      const hpR = await client.query(
+        `INSERT INTO hochphi (malop, mahv, kytt_tu, kytt_den, sobuoi, hocphimoibuoi, tonghocphi, trangthai, ghichu)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'ChuaNop', $8) RETURNING *`,
+        [id, lop.mahv, kyTuNgay, kyDenNgay, soBuoiTinhPhi, parseInt(lop.hocphimoibuoi), tongHocPhi, `Tự động tạo khi kết thúc lớp sớm. Buổi đã dạy: ${soBuoiDaDay}, Vắng có phép: ${soBuoiVangCoPhep}, GS nghỉ: ${soBuoiGSNghi}`]
+      );
+      hocphiCreated = hpR.rows[0];
+      
+      // Tự động tạo hoa hồng cho gia sư
+      if (lop.mags) {
+        const tyLeHH = parseFloat(lop.tylehhgiasu) || 70.00;
+        const tongHoaHong = Math.round(soBuoiTinhPhi * parseInt(lop.hocphimoibuoi) * (tyLeHH / 100.0));
+        
+        const hhR = await client.query(
+          `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoidaday, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT') RETURNING *`,
+          [lop.mags, id, kyTuNgay, kyDenNgay, soBuoiTinhPhi, parseInt(lop.hocphimoibuoi), tyLeHH, tongHoaHong]
+        );
+        hoahongCreated = hhR.rows[0];
+      }
     }
-    res.json({ success: true, message: 'Đã chốt kết thúc lớp thành công' });
+    
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      message: 'Đã chốt kết thúc lớp thành công',
+      data: {
+        soBuoiDaDay,
+        soBuoiVangCoPhep,
+        soBuoiGSNghi,
+        hocphi: hocphiCreated,
+        hoahong: hoahongCreated
+      }
+    });
+  } catch (e) { 
+    await client.query('ROLLBACK');
+    res.json({ success: false, message: e.message }); 
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// THAY ĐỔI TỶ LỆ HOA HỒNG - CHỈ GIÁM ĐỐC (BGD)
+// ============================================================
+router.put('/lop/:id/tylehh', async (req, res) => {
+  if (auth(req).vaitro !== 'BGD') {
+    return res.json({ success: false, message: 'Chỉ Giám đốc mới có quyền thay đổi tỷ lệ hoa hồng' });
+  }
+  try {
+    const { id } = req.params;
+    const { tylehh } = req.body;
+    const parsedTyLe = parseFloat(tylehh);
+    if (isNaN(parsedTyLe) || parsedTyLe < 0 || parsedTyLe > 100) {
+      return res.json({ success: false, message: 'Tỷ lệ hoa hồng phải từ 0 đến 100' });
+    }
+    
+    await pool(req).query('UPDATE lop SET tylehhgiasu = $1 WHERE malop = $2', [parsedTyLe, id]);
+    res.json({ success: true, message: `Đã cập nhật tỷ lệ hoa hồng thành ${parsedTyLe}%` });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
@@ -408,11 +737,47 @@ router.get('/baonghi', async (req, res) => {
        JOIN hocvien hv ON hv.mahv = yc.mahv
        LEFT JOIN giasu gs ON gs.mags = l.mags
        JOIN monhoc mh ON mh.mamh = yc.mamh
-       WHERE bd.trangthai IN ('HVVangCoPhep', 'GSNghi')
+       WHERE bd.trangthai IN ('HVVangCoPhep', 'GSNghi', 'HVXinNghi', 'GSXinNghi')
        ORDER BY bd.ngayday DESC`
     );
     res.json({ success: true, data: r.rows });
   } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Phê duyệt hoặc từ chối yêu cầu nghỉ học/dạy của một buổi học
+router.post('/baonghi/:mabuoi/xuly', requireOps, async (req, res) => {
+  try {
+    const { mabuoi } = req.params;
+    const { action } = req.body; // 'approve' hoặc 'reject'
+    if (!['approve', 'reject'].includes(action)) {
+      return res.json({ success: false, message: 'Hành động không hợp lệ' });
+    }
+
+    const checkR = await pool(req).query('SELECT trangthai FROM buoiday WHERE mabuoi = $1', [mabuoi]);
+    if (!checkR.rows.length) {
+      return res.json({ success: false, message: 'Không tìm thấy buổi học' });
+    }
+    const currentStatus = checkR.rows[0].trangthai;
+
+    let newStatus = currentStatus;
+    if (action === 'approve') {
+      if (currentStatus === 'HVXinNghi') newStatus = 'HVVangCoPhep';
+      else if (currentStatus === 'GSXinNghi') newStatus = 'GSNghi';
+      else return res.json({ success: false, message: 'Trạng thái buổi học không hợp lệ để phê duyệt' });
+    } else {
+      if (['HVXinNghi', 'GSXinNghi'].includes(currentStatus)) newStatus = 'ChoXacNhan';
+      else return res.json({ success: false, message: 'Trạng thái buổi học không hợp lệ để từ chối' });
+    }
+
+    await pool(req).query(
+      'UPDATE buoiday SET trangthai = $1, thoigianxacnhan = NOW() WHERE mabuoi = $2',
+      [newStatus, mabuoi]
+    );
+
+    res.json({ success: true, message: `Đã ${action === 'approve' ? 'phê duyệt' : 'từ chối'} yêu cầu nghỉ học thành công` });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
 });
 
 // Lấy danh sách tài khoản
@@ -445,14 +810,106 @@ router.post('/taikhoan/:id/toggle-lock', async (req, res) => {
     if (parseInt(id) === auth(req).matk) {
       return res.json({ success: false, message: 'Bạn không thể tự khóa tài khoản của chính mình' });
     }
-    const check = await pool(req).query('SELECT trangthai FROM taikhoan WHERE matk = $1', [id]);
+    const check = await pool(req).query('SELECT vaitro, trangthai FROM taikhoan WHERE matk = $1', [id]);
     if (!check.rows.length) {
       return res.json({ success: false, message: 'Tài khoản không tồn tại' });
     }
-    const currentStatus = check.rows[0].trangthai;
+    const targetUser = check.rows[0];
+    if (targetUser.vaitro === 'BGD' && auth(req).vaitro === 'SA') {
+      return res.json({ success: false, message: 'Admin không có quyền khóa/mở khóa tài khoản của Giám đốc' });
+    }
+
+    const currentStatus = targetUser.trangthai;
     const newStatus = currentStatus === 'Khoa' ? 'HoatDong' : 'Khoa';
     await pool(req).query('UPDATE taikhoan SET trangthai = $1 WHERE matk = $2', [newStatus, id]);
     res.json({ success: true, message: `Đã ${newStatus === 'Khoa' ? 'khóa' : 'mở khóa'} tài khoản thành công` });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Lấy tỷ lệ hoa hồng mặc định của hệ thống
+router.get('/config/tylehh', async (req, res) => {
+  try {
+    const r = await pool(req).query("SELECT giatri FROM thamso WHERE mats = 'TyLeHHMacDinh'");
+    const val = r.rows.length ? parseFloat(r.rows[0].giatri) : 70.00;
+    res.json({ success: true, tylehh: val });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Cập nhật tỷ lệ hoa hồng mặc định - Chỉ Giám đốc (BGD)
+router.post('/config/tylehh', async (req, res) => {
+  if (auth(req).vaitro !== 'BGD') {
+    return res.json({ success: false, message: 'Chỉ Giám đốc mới có quyền thay đổi tỷ lệ hoa hồng mặc định' });
+  }
+  try {
+    const { tylehh } = req.body;
+    const parsedTyLe = parseFloat(tylehh);
+    if (isNaN(parsedTyLe) || parsedTyLe < 0 || parsedTyLe > 100) {
+      return res.json({ success: false, message: 'Tỷ lệ hoa hồng phải từ 0 đến 100' });
+    }
+    
+    await pool(req).query(
+      `INSERT INTO thamso (mats, tents, giatri) 
+       VALUES ('TyLeHHMacDinh', 'Tỷ lệ hoa hồng mặc định (%)', $1)
+       ON CONFLICT (mats) DO UPDATE SET giatri = EXCLUDED.giatri`,
+      [parsedTyLe.toFixed(2)]
+    );
+    res.json({ success: true, message: `Đã cập nhật tỷ lệ hoa hồng mặc định thành ${parsedTyLe}%` });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Lấy học phí mặc định của các cấp
+router.get('/config/hocphi', async (req, res) => {
+  try {
+    const keys = ['HocPhi_Cap1', 'HocPhi_Cap2', 'HocPhi_Cap3', 'HocPhi_LuyenThiDH', 'HocPhi_TiengAnhGT', 'HocPhi_ChungChiQT', 'HocPhi_Khac'];
+    const r = await pool(req).query('SELECT mats, giatri FROM thamso WHERE mats = ANY($1)', [keys]);
+    const data = {};
+    const fallbacks = {
+      'HocPhi_Cap1': 100000,
+      'HocPhi_Cap2': 200000,
+      'HocPhi_Cap3': 300000,
+      'HocPhi_LuyenThiDH': 400000,
+      'HocPhi_TiengAnhGT': 350000,
+      'HocPhi_ChungChiQT': 500000,
+      'HocPhi_Khac': 250000
+    };
+    Object.keys(fallbacks).forEach(k => {
+      data[k] = fallbacks[k];
+    });
+    r.rows.forEach(row => {
+      data[row.mats] = parseInt(row.giatri) || fallbacks[row.mats];
+    });
+    res.json({ success: true, data });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Cập nhật học phí mặc định - Chỉ Giám đốc (BGD)
+router.post('/config/hocphi', async (req, res) => {
+  if (auth(req).vaitro !== 'BGD') {
+    return res.json({ success: false, message: 'Chỉ Giám đốc mới có quyền thay đổi học phí mặc định' });
+  }
+  try {
+    const { cap1, cap2, cap3, luyenthidh, tienganhgt, chungchiqt, khac } = req.body;
+    const updates = {
+      'HocPhi_Cap1': { name: 'Học phí mặc định Cấp 1', val: cap1 },
+      'HocPhi_Cap2': { name: 'Học phí mặc định Cấp 2', val: cap2 },
+      'HocPhi_Cap3': { name: 'Học phí mặc định Cấp 3', val: cap3 },
+      'HocPhi_LuyenThiDH': { name: 'Học phí mặc định Luyện thi Đại học', val: luyenthidh },
+      'HocPhi_TiengAnhGT': { name: 'Học phí mặc định Tiếng Anh Giao tiếp', val: tienganhgt },
+      'HocPhi_ChungChiQT': { name: 'Học phí mặc định Chứng chỉ Quốc tế', val: chungchiqt },
+      'HocPhi_Khac': { name: 'Học phí mặc định Khác', val: khac }
+    };
+
+    for (const [key, item] of Object.entries(updates)) {
+      if (item.val !== undefined && item.val !== null && !isNaN(parseInt(item.val)) && parseInt(item.val) > 0) {
+        await pool(req).query(
+          `INSERT INTO thamso (mats, tents, giatri) 
+           VALUES ($1, $2, $3)
+           ON CONFLICT (mats) DO UPDATE SET giatri = EXCLUDED.giatri`,
+          [key, item.name, String(item.val)]
+        );
+      }
+    }
+    res.json({ success: true, message: 'Cập nhật học phí mặc định thành công' });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
@@ -465,7 +922,7 @@ router.get('/lop/:id/detail', async (req, res) => {
     const qInfo = `
       SELECT 
         l.malop, l.ngaybatdau, l.ngayketthucdukien, l.ngayketthucthucte, l.trangthai AS ClassTrangThai, l.noidung AS ClassNoiDung, l.diadiem AS ClassDiaDiem, l.hinhthuchoc AS ClassHinhThuc, l.hocphimoibuoi, l.tylehhgiasu, l.lydoketthucsom,
-        mh.tenmh, yc.caplop,
+        mh.tenmh, yc.caplop, yc.songayhoc, yc.lichhoctrongtuan,
         hv.mahv, hv.hoten AS StudentName, hv.ngaysinh AS StudentNgaySinh, hv.gioitinh AS StudentGioiTinh, hv.sdt AS StudentSDT, hv.email AS StudentEmail, hv.diachi AS StudentDiaChi,
         gs.mags, gs.hoten AS TutorName, gs.ngaysinh AS TutorNgaySinh, gs.gioitinh AS TutorGioiTinh, gs.sdt AS TutorSDT, gs.email AS TutorEmail, gs.trinhdohocvan AS TutorTrinhDo, gs.chuyennganh AS TutorChuyenNganh, gs.kinhnghiem AS TutorKinhNghiem, gs.diemtrungbinh AS TutorDiem
       FROM lop l
@@ -484,8 +941,8 @@ router.get('/lop/:id/detail', async (req, res) => {
     const qStats = `
       SELECT 
         COUNT(*) FILTER (WHERE trangthai = 'DaDay') as count_daday,
+        COUNT(*) FILTER (WHERE trangthai = 'ChoXacNhan') as count_choxacnhan,
         COUNT(*) FILTER (WHERE trangthai = 'HVVangCoPhep') as count_hvvangcophep,
-        COUNT(*) FILTER (WHERE trangthai = 'HVVangKhongPhep') as count_hvvangkhongphep,
         COUNT(*) FILTER (WHERE trangthai = 'GSNghi') as count_gsnghi,
         COUNT(*) FILTER (WHERE trangthai = 'Huy') as count_huy
       FROM buoiday
