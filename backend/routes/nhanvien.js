@@ -163,6 +163,28 @@ router.get('/giasu', async (req, res) => {
 });
 
 // Lấy toàn bộ yêu cầu học kèm
+
+  // Lấy toàn bộ học viên
+  router.get('/hocvien', async (req, res) => {
+    try {
+      const q = `
+        SELECT hv.*, 
+          COALESCE(
+            (SELECT json_agg(json_build_object('malop', l.malop, 'tenmh', mh.tenmh, 'trangthai', l.trangthai)) 
+             FROM lop l 
+             JOIN yeucauhockem yc ON l.mayc = yc.mayc 
+             JOIN monhoc mh ON yc.mamh = mh.mamh 
+             WHERE yc.mahv = hv.mahv), 
+            '[]'::json
+          ) as lophoc 
+        FROM hocvien hv 
+        ORDER BY hv.hoten
+      `;
+      const r = await pool(req).query(q);
+      res.json({ success: true, data: r.rows });
+    } catch (e) { res.json({ success: false, message: e.message }); }
+  });
+
 router.get('/yeucau', async (req, res) => {
   try {
     const r = await pool(req).query(

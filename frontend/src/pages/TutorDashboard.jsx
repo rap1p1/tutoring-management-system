@@ -581,11 +581,11 @@ function TutorDashboard() {
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <strong>{c.tenmh}</strong>
                       <span className={c.trangthai === 'DaTT' ? 'text-teal' : 'text-amber'}>
-                        {parseInt(c.tonghoahong).toLocaleString()}đ
+                        {parseInt(c.tonghoahong || 0).toLocaleString()}đ
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {c.sobuoidaday} buổi × {parseInt(c.hocphihvmoibuoi).toLocaleString()}đ × {c.tylehh}%
+                      {c.sobuoidaday || 0} buổi × {parseInt(c.hocphihvmoibuoi || 0).toLocaleString()}đ × {c.tylehh || 0}%
                     </div>
                   </div>
                 ))
@@ -790,7 +790,7 @@ function TutorDashboard() {
 
       {/* Absence Modal - ĐƠN GIẢN HÓA */}
       {showAbsenceModal && (
-        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal" style={{ display: 'flex', zIndex: 300 }}>
           <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>Báo Vắng 1 Buổi - Lớp {selectedClassId}</h3>
@@ -830,9 +830,18 @@ function TutorDashboard() {
             {/* Calendar Controls */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <button className="btn btn-sm btn-secondary" onClick={handlePrevMonth}>&larr; Tháng trước</button>
-              <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
+              
+    <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
+      <h4 style={{ margin: 0, fontSize: "18px", fontWeight: "bold" }}>
+        
                 Tháng {calendarMonth + 1} / {calendarYear}
-              </h4>
+              
+      </h4>
+      <button className="btn btn-sm btn-rose" onClick={() => setShowAbsenceModal(true)}>
+        + Xin nghỉ / Báo vắng
+      </button>
+    </div>
+  
               <button className="btn btn-sm btn-secondary" onClick={handleNextMonth}>Tháng sau &rarr;</button>
             </div>
 

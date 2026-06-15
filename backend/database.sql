@@ -1,6 +1,5 @@
 -- ============================================================
 -- CSDL QUẢN LÝ TRUNG TÂM GIA SƯ - 14 BẢNG (PostgreSQL Compatible)
--- Đã sửa: NVARCHAR → VARCHAR, typo column names
 -- Chạy: psql -U postgres -d giasu_db -f database.sql
 -- ============================================================
 

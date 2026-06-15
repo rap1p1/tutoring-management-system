@@ -86,13 +86,20 @@ router.post('/register', async (req, res) => {
       const anhcccdPath = saveBase64Image(anhcccd, 'cccd');
       const anhbangcapPath = saveBase64Image(anhbangcap, 'bangcap');
       const anhthesinhvienPath = saveBase64Image(anhthesinhvien, 'thesv');
-      const anhdaidienPath = saveBase64Image(anhdaidien, 'avatar');
+      let anhdaidienPath = saveBase64Image(anhdaidien, 'avatar');
 
-      await client.query(
+      const gsResult = await client.query(
         `INSERT INTO giasu (matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING mags`,
         [matk, hoten, ngaysinh, gioitinh, cccd, sdt, email || null, trinhdohocvan, chuyennganh, parseInt(kinhnghiem) || 0, khuvuc, parseInt(hocphimongmuon), anhcccdPath, anhbangcapPath, anhthesinhvienPath, anhdaidienPath]
       );
+      
+      const mags = gsResult.rows[0].mags;
+      
+      if (!anhdaidienPath) {
+        anhdaidienPath = `https://ui-avatars.com/api/?name=GS${mags}&background=random`;
+        await client.query("UPDATE giasu SET anhdaidien = $1 WHERE mags = $2", [anhdaidienPath, mags]);
+      }
 
       await client.query('COMMIT');
       res.json({ success: true, message: 'Đăng ký hồ sơ gia sư thành công. Vui lòng chờ trung tâm duyệt hồ sơ.' });
