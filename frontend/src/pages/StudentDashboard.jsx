@@ -22,11 +22,11 @@ function StudentDashboard() {
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [classSessions, setClassSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
-  
+
   const [allSubjects, setAllSubjects] = useState([]);
   const [modalMsg, setModalMsg] = useState({ text: '', type: '' });
   const [globalError, setGlobalError] = useState('');
-  
+
   const [scheduleGrid, setScheduleGrid] = useState({});
   const [defaultHocPhis, setDefaultHocPhis] = useState({
     HocPhi_Cap1: 100000,
@@ -107,13 +107,13 @@ function StudentDashboard() {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
-    
+
     const lichHoc = getSelectedSchedule();
     if (lichHoc.length === 0) {
       setModalMsg({ text: 'Vui lòng chọn ít nhất 1 buổi học trong tuần!', type: 'error' });
       return;
     }
-    
+
     try {
       setModalMsg({ text: '', type: '' });
       const res = await fetch('/api/hocvien/yeucau', {
@@ -416,11 +416,11 @@ function StudentDashboard() {
           <div className="glass-card mb-4">
             <h3>Hồ Sơ Cá Nhân</h3>
             <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Học Viên (ID)</strong> {profile.mahv ? 'HV' + profile.mahv.toString().padStart(6, '0') : ''}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Họ và tên</strong> {profile.hoten}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Ngày sinh</strong> {new Date(profile.ngaysinh).toLocaleDateString('vi-VN')}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Số điện thoại</strong> {profile.sdt}</div>
-              <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Email</strong> {profile.email || 'Không có'}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Mã Học Viên (ID)</strong> {profile.mahv ? 'HV' + profile.mahv.toString().padStart(6, '0') : ''}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Họ và tên</strong> {profile.hoten}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Ngày sinh</strong> {new Date(profile.ngaysinh).toLocaleDateString('vi-VN')}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Số điện thoại</strong> {profile.sdt}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Email</strong> {profile.email || 'Không có'}</div>
             </div>
           </div>
 
@@ -453,7 +453,7 @@ function StudentDashboard() {
                           <td>{r.tenmh}</td>
                           <td>{r.caplop}</td>
                           <td>
-                            <strong>Đã học: {r.songayhoc} buổi</strong><br/>
+                            <strong>Đã học: {r.songayhoc} buổi</strong><br />
                             <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatLichHoc(r.lichhoctrongtuan)}</span>
                           </td>
                           <td>
@@ -533,19 +533,19 @@ function StudentDashboard() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                       <strong>{t.tenmh}</strong>
                       <span className={t.trangthai === 'DaNop' ? 'text-teal' : (t.trangthai === 'ChoXacNhan' ? 'text-warning' : 'text-rose')}>
-                        {parseInt(t.tonghocphi).toLocaleString()}đ
+                        {parseInt(t.tonghocphi || 0).toLocaleString()}đ
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {t.sobuoi} buổi × {parseInt(t.hocphimoibuoi).toLocaleString()}đ
+                      {t.sobuoi || 0} buổi × {parseInt(t.hocphimoibuoi || 0).toLocaleString()}đ
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                       <span>
                         Trạng thái: {t.trangthai === 'DaNop' ? 'Đã Thanh Toán' : (t.trangthai === 'ChoXacNhan' ? 'Chờ xác nhận' : 'Chưa Thanh Toán')}
                       </span>
                       {t.trangthai === 'ChuaNop' && (
-                        <button 
-                          className="btn btn-xs btn-teal" 
+                        <button
+                          className="btn btn-xs btn-teal"
                           onClick={() => handlePayTuition(t.mahp)}
                           style={{ padding: '2px 8px', fontSize: '11px' }}
                         >
@@ -567,20 +567,20 @@ function StudentDashboard() {
           <div className="modal-content glass-card" style={{ maxWidth: '600px' }}>
             <div className="modal-header">
               <h3>Gửi Yêu Cầu Học Kèm Mới</h3>
-              <span className="close-btn" onClick={() => { setShowRequestModal(false); setModalMsg({text:'', type:''}); setScheduleGrid({}); }}>&times;</span>
+              <span className="close-btn" onClick={() => { setShowRequestModal(false); setModalMsg({ text: '', type: '' }); setScheduleGrid({}); }}>&times;</span>
             </div>
-            
+
             {modalMsg.text && (
-              <div style={{ 
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', 
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, 
-                padding: '10px', borderRadius: '6px', marginBottom: '15px' 
+              <div style={{
+                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
+                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
+                padding: '10px', borderRadius: '6px', marginBottom: '15px'
               }}>
                 {modalMsg.text}
               </div>
             )}
-            
+
             <form onSubmit={handleAddRequest}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div className="form-group">
@@ -670,7 +670,7 @@ function StudentDashboard() {
               <div className="form-group">
                 <label>Khu vực học / Nơi ở *</label>
                 <select name="diachi" required>
-                  {['Quận 1','Quận 3','Quận 4','Quận 5','Quận 6','Quận 7','Quận 8','Quận 10','Quận 11','Quận 12','Quận Bình Tân','Quận Bình Thạnh','Quận Gò Vấp','Quận Phú Nhuận','Quận Tân Bình','Quận Tân Phú','TP Thủ Đức','Huyện Bình Chánh','Khác'].map(kv => (
+                  {['Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8', 'Quận 10', 'Quận 11', 'Quận 12', 'Quận Bình Tân', 'Quận Bình Thạnh', 'Quận Gò Vấp', 'Quận Phú Nhuận', 'Quận Tân Bình', 'Quận Tân Phú', 'TP Thủ Đức', 'Huyện Bình Chánh', 'Khác'].map(kv => (
                     <option key={kv} value={kv}>{kv}</option>
                   ))}
                 </select>
@@ -691,20 +691,20 @@ function StudentDashboard() {
           <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>Đánh Giá Gia Sư - Lớp {selectedClassId}</h3>
-              <span className="close-btn" onClick={() => { setShowReviewModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
+              <span className="close-btn" onClick={() => { setShowReviewModal(false); setModalMsg({ text: '', type: '' }); }}>&times;</span>
             </div>
-            
+
             {modalMsg.text && (
-              <div style={{ 
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', 
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, 
-                padding: '10px', borderRadius: '6px', marginBottom: '15px' 
+              <div style={{
+                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
+                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
+                padding: '10px', borderRadius: '6px', marginBottom: '15px'
               }}>
                 {modalMsg.text}
               </div>
             )}
-            
+
             <form onSubmit={handleReview}>
               <div className="form-group">
                 <label>Đánh giá sao (1-5) *</label>
@@ -732,20 +732,20 @@ function StudentDashboard() {
           <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>Yêu Cầu Đổi Gia Sư / Nghỉ Học</h3>
-              <span className="close-btn" onClick={() => { setShowChangeModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
+              <span className="close-btn" onClick={() => { setShowChangeModal(false); setModalMsg({ text: '', type: '' }); }}>&times;</span>
             </div>
-            
+
             {modalMsg.text && (
-              <div style={{ 
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', 
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, 
-                padding: '10px', borderRadius: '6px', marginBottom: '15px' 
+              <div style={{
+                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
+                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
+                padding: '10px', borderRadius: '6px', marginBottom: '15px'
               }}>
                 {modalMsg.text}
               </div>
             )}
-            
+
             <form onSubmit={handleChangeTutor}>
               <div className="form-group">
                 <label>Lý do (Chi tiết) *</label>
@@ -762,24 +762,24 @@ function StudentDashboard() {
 
       {/* Absence Modal - ĐƠN GIẢN HÓA: Chỉ cần chọn ngày + ca */}
       {showAbsenceModal && (
-        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal" style={{ display: 'flex', zIndex: 300 }}>
           <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>Báo Nghỉ 1 Buổi - Lớp {selectedClassId}</h3>
-              <span className="close-btn" onClick={() => { setShowAbsenceModal(false); setModalMsg({text:'', type:''}); }}>&times;</span>
+              <span className="close-btn" onClick={() => { setShowAbsenceModal(false); setModalMsg({ text: '', type: '' }); }}>&times;</span>
             </div>
-            
+
             {modalMsg.text && (
-              <div style={{ 
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981', 
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`, 
-                padding: '10px', borderRadius: '6px', marginBottom: '15px' 
+              <div style={{
+                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
+                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
+                padding: '10px', borderRadius: '6px', marginBottom: '15px'
               }}>
                 {modalMsg.text}
               </div>
             )}
-            
+
             <form onSubmit={handleAbsence}>
               <div className="form-group">
                 <label>Ngày xin nghỉ *</label>
@@ -814,7 +814,7 @@ function StudentDashboard() {
               </h3>
               <span className="close-btn" onClick={() => { setShowCalendarModal(false); }}>&times;</span>
             </div>
-            
+
             {/* Legend */}
             <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', fontSize: '12px' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.2)', border: '1px solid #f59e0b', display: 'inline-block' }}></span> Chờ xác nhận</span>
@@ -826,9 +826,18 @@ function StudentDashboard() {
             {/* Calendar Controls */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <button className="btn btn-sm btn-secondary" onClick={handlePrevMonth}>&larr; Tháng trước</button>
-              <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
+              
+    <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
+      <h4 style={{ margin: 0, fontSize: "18px", fontWeight: "bold" }}>
+        
                 Tháng {calendarMonth + 1} / {calendarYear}
-              </h4>
+              
+      </h4>
+      <button className="btn btn-sm btn-rose" onClick={() => setShowAbsenceModal(true)}>
+        + Xin nghỉ / Báo vắng
+      </button>
+    </div>
+  
               <button className="btn btn-sm btn-secondary" onClick={handleNextMonth}>Tháng sau &rarr;</button>
             </div>
 
@@ -837,7 +846,7 @@ function StudentDashboard() {
             ) : (
               <div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '15px' }}>
-                  💡 Click vào ô <strong style={{color:'#f59e0b'}}>vàng (Chờ xác nhận)</strong> để xin nghỉ/báo vắng cho buổi học đó.
+                  💡 Click vào ô <strong style={{ color: '#f59e0b' }}>vàng (Chờ xác nhận)</strong> để xin nghỉ/báo vắng cho buổi học đó.
                 </p>
                 <div className="calendar-grid">
                   <div className="calendar-header-day">Thứ 2</div>
@@ -854,10 +863,10 @@ function StudentDashboard() {
                     if (cell.isPadding) {
                       return <div key={cell.key} className="calendar-cell padding" />;
                     }
-                    
+
                     const isToday = new Date().getDate() === cell.day &&
-                                    new Date().getMonth() === calendarMonth &&
-                                    new Date().getFullYear() === calendarYear;
+                      new Date().getMonth() === calendarMonth &&
+                      new Date().getFullYear() === calendarYear;
 
                     return (
                       <div key={cell.key} className={`calendar-cell ${isToday ? 'today' : ''}`}>
