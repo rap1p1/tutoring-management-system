@@ -596,7 +596,8 @@ router.post('/yeucaudoi/:id/xuly', requireOps, async (req, res) => {
       
       await client.query(
         `INSERT INTO hochphi (malop, mahv, kytt_tu, kytt_den, sobuoi, hocphimoibuoi, tonghocphi, trangthai, ghichu)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'ChuaNop', $8)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'ChuaNop', $8)
+         ON CONFLICT (malop, kytt_tu, kytt_den) DO NOTHING`,
         [classId, lop.mahv, kyTuNgay, kyDenNgay, soBuoiTinhPhi, parseInt(lop.hocphimoibuoi), tongHocPhi, `Tự động tạo khi duyệt đơn xin nghỉ lớp. Buổi đã dạy: ${soBuoiDaDay}, Vắng có phép: ${soBuoiVangCoPhep}, GS nghỉ: ${soBuoiGSNghi}`]
       );
       
@@ -607,7 +608,8 @@ router.post('/yeucaudoi/:id/xuly', requireOps, async (req, res) => {
         
         await client.query(
           `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoidaday, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT')`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT')
+           ON CONFLICT (mags, malop, kytt_tu, kytt_den) DO NOTHING`,
           [lop.mags, classId, kyTuNgay, kyDenNgay, soBuoiTinhPhi, parseInt(lop.hocphimoibuoi), tyLeHH, tongHoaHong]
         );
       }

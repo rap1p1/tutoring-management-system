@@ -7,7 +7,7 @@ function pool(req) { return req.app.locals.pool; }
 function auth(req) { return req.session.user; }
 
 function saveBase64Image(base64Str, prefix) {
-  if (!base64Str) return null;
+  if (!base64Str || typeof base64Str !== 'string') return null;
   const match = base64Str.match(/^data:image\/(\w+);base64,(.+)$/);
   if (!match) return null;
   

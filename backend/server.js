@@ -48,7 +48,8 @@ function requireRole(...roles) {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const username = (req.body.username || '').trim();
+    const password = req.body.password;
     const result = await pool.query('SELECT * FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (result.rows.length === 0) return res.json({ success: false, message: 'Sai tên đăng nhập hoặc mật khẩu' });
     const tk = result.rows[0];
