@@ -1605,7 +1605,11 @@ function AdminDashboard() {
                                 wordBreak: "break-word",
                               }}
                             >
-                              {s.lydo}
+                              {s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (
+                                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>
+                              ) : (
+                                s.lydo
+                              )}
                             </td>
                             <td>
                               <span
@@ -1752,7 +1756,11 @@ function AdminDashboard() {
                                   wordBreak: "break-word",
                                 }}
                               >
-                                {a.noidung}
+                                {a.noidung && a.noidung.includes('[BẤT KHẢ KHÁNG]') ? (
+                                  <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{a.noidung}</span>
+                                ) : (
+                                  a.noidung
+                                )}
                               </td>
                               <td>
                                 <span className={`status-badge ${statusClass}`}>
