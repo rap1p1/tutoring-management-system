@@ -125,7 +125,7 @@ function StudentDashboard() {
           hinhthuchoc: data.hinhthuc,
           yc_gioitinhgs: data.gioitinh,
           yc_trinhdogs: data.trinhdo,
-          songayhoc: 0,
+          songayhoc: 20,
           lichhoctrongtuan: JSON.stringify(lichHoc),
           diachi: data.diachi,
           ghichu: data.ghichu
