@@ -5,13 +5,25 @@ import {
   UserCheck,
   ClipboardList,
   DollarSign,
+  CheckCircle,
+  Clock,
+  Users,
   LogOut,
-  Check,
-  X,
+  ArrowRight,
+  ArrowLeft,
+  Search,
   PlusCircle,
-  CreditCard,
+  Trash2,
+  Calendar,
+  FileText,
   Download,
+  Briefcase,
+  GraduationCap,
+  X,
+  Settings,
 } from "lucide-react";
+import { printTuitionInvoice } from "../components/billing/TuitionInvoice";
+import { printSalaryInvoice } from "../components/billing/SalaryInvoice";
 import Swal from "sweetalert2";
 import {
   BarChart,
@@ -296,12 +308,12 @@ function AdminDashboard() {
     }
   };
 
-  const handleConfirmTuition = async (id) => {
+  const handleConfirmTuition = async (id, hinhthuctt) => {
     try {
       const res = await fetch(`/api/nhanvien/hocphi/${id}/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hinhthuctt: "ChuyenKhoan" }),
+        body: JSON.stringify({ hinhthuctt }),
       });
       const json = await res.json();
       if (json.success) {
@@ -1446,13 +1458,29 @@ function AdminDashboard() {
                               {t.trangthai !== "DaNop" &&
                                 currentUser &&
                                 currentUser.vaitro !== "BGD" && (
-                                  <button
-                                    className="btn btn-xs btn-teal"
-                                    onClick={() => handleConfirmTuition(t.mahp)}
-                                  >
-                                    Duyệt Nộp
-                                  </button>
+                                  <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '5px' }}>
+                                    <button
+                                      className="btn btn-xs btn-teal"
+                                      onClick={() => handleConfirmTuition(t.mahp, 'TienMat')}
+                                    >
+                                      Thu Tiền Mặt
+                                    </button>
+                                    <button
+                                      className="btn btn-xs btn-primary"
+                                      onClick={() => handleConfirmTuition(t.mahp, 'ChuyenKhoan')}
+                                    >
+                                      Xác Nhận CK
+                                    </button>
+                                  </div>
                                 )}
+                              {t.trangthai === "DaNop" && (
+                                <button
+                                  className="btn btn-xs btn-secondary"
+                                  onClick={() => printTuitionInvoice(t)}
+                                >
+                                  In Biên Lai
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -1540,6 +1568,14 @@ function AdminDashboard() {
                                     Duyệt TT
                                   </button>
                                 )}
+                              {c.trangthai === "DaTT" && (
+                                <button
+                                  className="btn btn-xs btn-secondary"
+                                  onClick={() => printSalaryInvoice(c)}
+                                >
+                                  In Phiếu Lương
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))
