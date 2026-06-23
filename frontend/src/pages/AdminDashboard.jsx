@@ -4,7 +4,8 @@ import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusC
 import Swal from 'sweetalert2';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
-
+import TuitionInvoiceModal from "../components/billing/TuitionInvoiceModal";
+import SalaryInvoiceModal from "../components/billing/SalaryInvoiceModal";
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -78,6 +79,9 @@ function AdminDashboard() {
 
   // Modals state
   const [showClassModal, setShowClassModal] = useState(false);
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+  const [showCreateCommissionModal, setShowCreateCommissionModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   
   useEffect(() => {
@@ -188,6 +192,7 @@ function AdminDashboard() {
   const handleOpenClassModal = (req) => {
     setSelectedRequest(req);
     setShowClassModal(true);
+    setShowCreateClassModal(true);
   };
 
   const formatLichHoc = (lichHocStr) => {
@@ -248,6 +253,7 @@ function AdminDashboard() {
       if (json.success) {
         showMsg('success', json.message || 'Ghép lớp thành công!');
         setShowClassModal(false);
+        setShowCreateClassModal(false);
         fetchData();
       } else {
         showMsg('error', json.message);
@@ -791,9 +797,14 @@ function AdminDashboard() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                   <h3>Khoản Thu Học Phí (Học Viên)</h3>
-                  <button className="btn btn-secondary" onClick={exportFinances} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Download size={16} /> Xuất Excel Doanh Thu
-                  </button>
+                  <div>
+                    {currentUser && currentUser.vaitro !== 'BGD' && (
+                      <button className="btn btn-primary" onClick={() => setShowCreateInvoiceModal(true)} style={{ marginRight: '10px' }}>+ Tạo Y/C Học Phí</button>
+                    )}
+                    <button className="btn btn-secondary" onClick={exportFinances} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <Download size={16} /> Xuất Excel
+                    </button>
+                  </div>
                 </div>
                 <div className="table-responsive">
                   <table className="table">
@@ -820,7 +831,14 @@ function AdminDashboard() {
               </div>
 
               <div>
-                <h3 style={{ marginBottom: '15px' }}>Thanh Toán Hoa Hồng (Gia Sư)</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3>Thanh Toán Hoa Hồng (Gia Sư)</h3>
+                  <div>
+                    {currentUser && currentUser.vaitro !== 'BGD' && (
+                      <button className="btn btn-primary" onClick={() => setShowCreateCommissionModal(true)}>+ Tạo Y/C Hoa Hồng</button>
+                    )}
+                  </div>
+                </div>
                 <div className="table-responsive">
                   <table className="table">
                     <thead><tr><th>Gia sư</th><th>Lớp / Môn</th><th>Hoa hồng</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
@@ -1266,15 +1284,35 @@ function AdminDashboard() {
         </div>
       )}
 
-      {/* Class Creation Modal */}
-      {showClassModal && selectedRequest && (
+      {/* Finance Modals */}
+      {showCreateInvoiceModal && (
+        <TuitionInvoiceModal 
+          onClose={() => setShowCreateInvoiceModal(false)}
+          onSuccess={() => {
+            setShowCreateInvoiceModal(false);
+            fetchData();
+          }}
+        />
+      )}
+      
+      {showCreateCommissionModal && (
+        <SalaryInvoiceModal 
+          onClose={() => setShowCreateCommissionModal(false)}
+          onSuccess={() => {
+            setShowCreateCommissionModal(false);
+            fetchData();
+          }}
+        />
+      )}
+
+      {/* Create Class Modal */}
+      {showCreateClassModal && selectedRequest && (
         <div className="modal" style={{ display: 'flex' }}>
           <div className="modal-content glass-card">
             <div className="modal-header">
               <h3>Tạo Lớp & Phân Công Gia Sư</h3>
-              <span className="close-btn" onClick={() => setShowClassModal(false)}>&times;</span>
+              <span className="close-btn" onClick={() => setShowCreateClassModal(false)}>&times;</span>
             </div>
-            
             {/* Hiển thị lịch học từ yêu cầu */}
             <div style={{ backgroundColor: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', padding: '12px', marginBottom: '15px' }}>
               <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#a5b4fc' }}><strong>📋 Thông tin yêu cầu:</strong></p>
