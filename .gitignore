@@ -5,3 +5,5 @@ node_modules/
 dist/
 build/
 backend/uploads/
+frontend/test-data/playwright-report/
+frontend/test-data/test-results/

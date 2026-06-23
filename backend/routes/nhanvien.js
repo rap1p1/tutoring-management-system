@@ -162,6 +162,56 @@ router.get('/giasu', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
+// Lấy toàn bộ học viên
+router.get('/hocvien', async (req, res) => {
+  try {
+    const r = await pool(req).query(`SELECT * FROM hocvien ORDER BY hoten`);
+    res.json({ success: true, data: r.rows });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Chi tiết học viên (có lớp đang học)
+router.get('/hocvien/:id/detail', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [hvRes, lopRes] = await Promise.all([
+      pool(req).query(`SELECT * FROM hocvien WHERE mahv = $1`, [id]),
+      pool(req).query(`
+        SELECT l.malop, mh.tenmh, gs.hoten AS tengiasu, gs.sdt AS sdtgiasu, l.ngaybatdau, l.trangthai, yc.caplop
+        FROM lop l
+        JOIN yeucauhockem yc ON yc.mayc = l.mayc
+        JOIN monhoc mh ON mh.mamh = yc.mamh
+        JOIN giasu gs ON gs.mags = l.mags
+        WHERE yc.mahv = $1
+        ORDER BY l.ngaybatdau DESC
+      `, [id])
+    ]);
+    if (!hvRes.rows[0]) return res.json({ success: false, message: 'Không tìm thấy học viên' });
+    res.json({ success: true, data: { ...hvRes.rows[0], lophoc: lopRes.rows } });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Chi tiết gia sư (có lớp đang dạy)
+router.get('/giasu/:id/detail', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [gsRes, lopRes] = await Promise.all([
+      pool(req).query(`SELECT * FROM giasu WHERE mags = $1`, [id]),
+      pool(req).query(`
+        SELECT l.malop, mh.tenmh, hv.hoten AS tenhocvien, hv.sdt AS sdthocvien, l.ngaybatdau, l.trangthai, yc.caplop
+        FROM lop l
+        JOIN yeucauhockem yc ON yc.mayc = l.mayc
+        JOIN monhoc mh ON mh.mamh = yc.mamh
+        JOIN hocvien hv ON hv.mahv = yc.mahv
+        WHERE l.mags = $1
+        ORDER BY l.ngaybatdau DESC
+      `, [id])
+    ]);
+    if (!gsRes.rows[0]) return res.json({ success: false, message: 'Không tìm thấy gia sư' });
+    res.json({ success: true, data: { ...gsRes.rows[0], lophoc: lopRes.rows } });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
 // Lấy toàn bộ yêu cầu học kèm
 
   // Lấy toàn bộ học viên
