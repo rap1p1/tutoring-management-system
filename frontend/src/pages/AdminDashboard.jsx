@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusCircle, CreditCard, Download } from 'lucide-react';
+import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusCircle, CreditCard, Download, Users, GraduationCap, MessageSquare, Shield, Settings } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -12,6 +12,28 @@ function AdminDashboard() {
   const [globalError, setGlobalError] = useState('');
   const [globalSuccess, setGlobalSuccess] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Filter & Pagination
+  const [filterText, setFilterText] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const handleTabChange = (tab) => { setActiveTab(tab); setFilterText(''); setCurrentPage(1); };
+
+  // Profile detail modal
+  const [profileModal, setProfileModal] = useState(null); // { type: 'student'|'tutor', data: {...} }
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  const openProfileModal = async (type, id) => {
+    setLoadingProfile(true);
+    setProfileModal({ type, data: null });
+    try {
+      const url = type === 'student' ? `/api/nhanvien/hocvien/${id}/detail` : `/api/nhanvien/giasu/${id}/detail`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success) setProfileModal({ type, data: json.data });
+    } catch (e) { console.error(e); }
+    setLoadingProfile(false);
+  };
 
   // Data states
   const [stats, setStats] = useState({ activeClasses: 0, pendingTutors: 0, pendingRequests: 0, revenue: 0 });
@@ -37,6 +59,7 @@ function AdminDashboard() {
     HocPhi_Khac: 250000
   });
   const [allTutors, setAllTutors] = useState([]);
+  const [allStudents, setAllStudents] = useState([]);
 
   const getDefaultHocPhi = (cap) => {
     if (cap === 'Cấp 1') return defaultHocPhis.HocPhi_Cap1;
@@ -64,7 +87,7 @@ function AdminDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statRes, tutRes, reqRes, classRes, tuitRes, commRes, suppRes, absRes, chartRes, accRes, profRes, meRes, tyleRes, hpRes, allTutorsRes] = await Promise.all([
+      const [statRes, tutRes, reqRes, classRes, tuitRes, commRes, suppRes, absRes, chartRes, accRes, profRes, meRes, tyleRes, hpRes, allTutorsRes, allStudentsRes] = await Promise.all([
         fetch('/api/nhanvien/stats').then(r => r.json()),
         fetch('/api/nhanvien/giasu/pending').then(r => r.json()),
         fetch('/api/nhanvien/yeucau').then(r => r.json()),
@@ -79,7 +102,8 @@ function AdminDashboard() {
         fetch('/api/auth/me').then(r => r.json()),
         fetch('/api/nhanvien/config/tylehh').then(r => r.json()),
         fetch('/api/nhanvien/config/hocphi').then(r => r.json()),
-        fetch('/api/nhanvien/giasu').then(r => r.json())
+        fetch('/api/nhanvien/giasu').then(r => r.json()),
+        fetch('/api/nhanvien/hocvien').then(r => r.json())
       ]);
 
       if (!statRes.success) {
@@ -106,6 +130,7 @@ function AdminDashboard() {
         setDefaultHocPhis(hpRes.data);
       }
       setAllTutors(allTutorsRes.data || []);
+      setAllStudents(allStudentsRes.data || []);
     } catch (e) {
       console.error(e);
       setGlobalError('Lỗi tải dữ liệu bảng điều khiển.');
@@ -521,6 +546,30 @@ function AdminDashboard() {
 
   if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Đang tải...</div>;
 
+  const pendingTutorsCount = pendingTutors.filter(t => t.trangthai === 'ChoDuyet').length;
+  const pendingReqsCount = requests.filter(r => r.trangthai === 'ChoGhep').length;
+  const pendingSupportCount = supportRequests.filter(r => r.trangthai === 'ChoXuLy').length + absences.filter(a => ['HVXinNghi', 'GSXinNghi'].includes(a.trangthai)).length;
+
+  const renderPagination = (totalItems) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    if (totalPages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '20px' }}>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>&larr; Trước</button>
+        <span style={{ fontSize: '14px' }}>Trang {currentPage} / {totalPages}</span>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Sau &rarr;</button>
+      </div>
+    );
+  };
+
+  const renderSearchBox = (placeholder) => (
+    <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'flex-end' }}>
+      <input type="text" className="form-control" placeholder={placeholder} value={filterText}
+        onChange={(e) => { setFilterText(e.target.value); setCurrentPage(1); }}
+        style={{ maxWidth: '300px' }} />
+    </div>
+  );
+
   return (
     <div className="view-section" style={{ display: 'block' }}>
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -548,68 +597,64 @@ function AdminDashboard() {
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="stats-row mb-4">
-        <div className="stats-card">
+      {/* Stats Cards Navigation Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+
+        <div className={`stats-card${activeTab === 'classes' ? ' active-card' : ''}`} onClick={() => handleTabChange('classes')} style={{ cursor: 'pointer', border: activeTab === 'classes' ? '2px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.05)' }}>
           <div className="stats-icon text-indigo"><BookOpen size={24} /></div>
           <div className="stats-info"><span className="stats-label">Lớp Đang Hoạt Động</span><span className="stats-value">{stats.activeClasses}</span></div>
         </div>
-        <div className="stats-card">
+
+        <div className={`stats-card${activeTab === 'tutors' ? ' active-card' : ''}`} onClick={() => handleTabChange('tutors')} style={{ cursor: 'pointer', border: activeTab === 'tutors' ? '2px solid var(--color-teal)' : '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+          {pendingTutorsCount > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>{pendingTutorsCount}</span>}
           <div className="stats-icon text-teal"><UserCheck size={24} /></div>
           <div className="stats-info"><span className="stats-label">Hồ Sơ GS Chờ Duyệt</span><span className="stats-value">{stats.pendingTutors}</span></div>
         </div>
-        <div className="stats-card">
+
+        <div className={`stats-card${activeTab === 'requests' ? ' active-card' : ''}`} onClick={() => handleTabChange('requests')} style={{ cursor: 'pointer', border: activeTab === 'requests' ? '2px solid var(--color-amber)' : '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+          {pendingReqsCount > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>{pendingReqsCount}</span>}
           <div className="stats-icon text-amber"><ClipboardList size={24} /></div>
           <div className="stats-info"><span className="stats-label">Yêu Cầu Học Chờ Ghép</span><span className="stats-value">{stats.pendingRequests}</span></div>
         </div>
-        <div className="stats-card">
+
+        <div className={`stats-card${activeTab === 'finances' ? ' active-card' : ''}`} onClick={() => handleTabChange('finances')} style={{ cursor: 'pointer', border: activeTab === 'finances' ? '2px solid var(--color-rose)' : '1px solid rgba(255,255,255,0.05)' }}>
           <div className="stats-icon text-rose"><DollarSign size={24} /></div>
           <div className="stats-info"><span className="stats-label">Tổng Doanh Thu</span><span className="stats-value">{parseInt(stats.revenue || 0).toLocaleString()}đ</span></div>
         </div>
-      </div>
 
-      {/* Revenue Chart */}
-      <div className="glass-card mb-4" style={{ padding: '20px' }}>
-        <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <DollarSign size={20} className="text-rose" /> Biểu Đồ Doanh Thu Theo Tháng
-        </h3>
-        <div style={{ width: '100%', height: '300px' }}>
-          {revenueData && revenueData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                <XAxis dataKey="month" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" tickFormatter={(value) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(value)} />
-                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} formatter={(value, name) => [new Intl.NumberFormat('vi-VN').format(value) + ' VNĐ', name]} />
-                <Legend />
-                <Bar dataKey="revenue" name="Doanh Thu (VNĐ)" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="profit" name="Lợi Nhuận Thực Tế (VNĐ)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '8px' }}>
-              Chưa có dữ liệu doanh thu để thống kê
-            </div>
-          )}
+        <div className={`stats-card${activeTab === 'all_students' ? ' active-card' : ''}`} onClick={() => handleTabChange('all_students')} style={{ cursor: 'pointer', border: activeTab === 'all_students' ? '2px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="stats-icon text-indigo"><Users size={24} /></div>
+          <div className="stats-info"><span className="stats-label">Hồ Sơ Học Viên</span><span className="stats-value">{allStudents.length}</span></div>
         </div>
+
+        <div className={`stats-card${activeTab === 'all_tutors' ? ' active-card' : ''}`} onClick={() => handleTabChange('all_tutors')} style={{ cursor: 'pointer', border: activeTab === 'all_tutors' ? '2px solid var(--color-teal)' : '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="stats-icon text-teal"><GraduationCap size={24} /></div>
+          <div className="stats-info"><span className="stats-label">Hồ Sơ Gia Sư</span><span className="stats-value">{allTutors.length}</span></div>
+        </div>
+
+        <div className={`stats-card${activeTab === 'support' ? ' active-card' : ''}`} onClick={() => handleTabChange('support')} style={{ cursor: 'pointer', border: activeTab === 'support' ? '2px solid var(--color-amber)' : '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+          {pendingSupportCount > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold' }}>{pendingSupportCount}</span>}
+          <div className="stats-icon text-amber"><MessageSquare size={24} /></div>
+          <div className="stats-info"><span className="stats-label">Yêu Cầu Đổi/Nghỉ</span><span className="stats-value">{supportRequests.length}</span></div>
+        </div>
+
+        {currentUser && (currentUser.vaitro === 'SA' || currentUser.vaitro === 'BGD') && (
+          <div className={`stats-card${activeTab === 'accounts' ? ' active-card' : ''}`} onClick={() => handleTabChange('accounts')} style={{ cursor: 'pointer', border: activeTab === 'accounts' ? '2px solid var(--color-rose)' : '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="stats-icon text-rose"><Shield size={24} /></div>
+            <div className="stats-info"><span className="stats-label">Quản Lý Tài Khoản</span><span className="stats-value">{accounts.length}</span></div>
+          </div>
+        )}
+
+        {currentUser && currentUser.vaitro === 'BGD' && (
+          <div className={`stats-card${activeTab === 'settings' ? ' active-card' : ''}`} onClick={() => handleTabChange('settings')} style={{ cursor: 'pointer', border: activeTab === 'settings' ? '2px solid #94a3b8' : '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="stats-icon" style={{ color: '#94a3b8' }}><Settings size={24} /></div>
+            <div className="stats-info"><span className="stats-label">Cấu Hình Hệ Thống</span><span className="stats-value">Cài đặt</span></div>
+          </div>
+        )}
       </div>
 
-      {/* Tabs */}
+      {/* Tab Content */}
       <div className="glass-card">
-        <div className="admin-tabs">
-          <button className={`admin-tab ${activeTab === 'tutors' ? 'active' : ''}`} onClick={() => setActiveTab('tutors')}>Duyệt Hồ Sơ Gia Sư</button>
-          <button className={`admin-tab ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>Yêu Cầu Học Kèm</button>
-          <button className={`admin-tab ${activeTab === 'classes' ? 'active' : ''}`} onClick={() => setActiveTab('classes')}>Danh Sách Lớp & Học Phí</button>
-          <button className={`admin-tab ${activeTab === 'finances' ? 'active' : ''}`} onClick={() => setActiveTab('finances')}>Tài Chính & Hoa Hồng</button>
-          <button className={`admin-tab ${activeTab === 'support' ? 'active' : ''}`} onClick={() => setActiveTab('support')}>Yêu Cầu Đổi/Nghỉ</button>
-          {currentUser && (currentUser.vaitro === 'SA' || currentUser.vaitro === 'BGD') && (
-            <button className={`admin-tab ${activeTab === 'accounts' ? 'active' : ''}`} onClick={() => setActiveTab('accounts')}>Quản Lý Tài Khoản</button>
-          )}
-          {currentUser && currentUser.vaitro === 'BGD' && (
-            <button className={`admin-tab ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>Cấu Hình Hệ Thống</button>
-          )}
-        </div>
-
         <div className="card-body">
           {/* TUTORS TAB */}
           {activeTab === 'tutors' && (
@@ -919,6 +964,77 @@ function AdminDashboard() {
               </table>
             </div>
           )}
+          {/* ALL STUDENTS TAB */}
+          {activeTab === 'all_students' && (() => {
+            const filteredData = allStudents.filter(s =>
+              (s.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (s.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (s.email || '').toLowerCase().includes(filterText.toLowerCase())
+            );
+            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+            return (
+              <div className="table-responsive">
+                {renderSearchBox("Tìm theo tên, SĐT, email...")}
+                <table className="table">
+                  <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Email</th><th>Địa chỉ</th><th>Cấp học</th><th></th></tr></thead>
+                  <tbody>
+                    {paginatedData.length === 0 ? (
+                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Không có dữ liệu</td></tr>
+                    ) : (
+                      paginatedData.map(s => (
+                        <tr key={s.mahv}>
+                          <td><strong>{s.hoten}</strong></td>
+                          <td>{s.sdt}</td>
+                          <td>{s.email || 'Chưa có'}</td>
+                          <td>{s.diachi || 'Chưa có'}</td>
+                          <td>{s.caphoc || 'Chưa có'}</td>
+                          <td><button className="btn btn-xs btn-teal" onClick={() => openProfileModal('student', s.mahv)}>Chi tiết</button></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPagination(filteredData.length)}
+              </div>
+            );
+          })()}
+
+          {/* ALL TUTORS TAB */}
+          {activeTab === 'all_tutors' && (() => {
+            const filteredData = allTutors.filter(t =>
+              (t.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (t.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (t.chuyennganh || '').toLowerCase().includes(filterText.toLowerCase())
+            );
+            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+            return (
+              <div className="table-responsive">
+                {renderSearchBox("Tìm theo tên, SĐT, chuyên ngành...")}
+                <table className="table">
+                  <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Chuyên ngành</th><th>Học phí (đ/buổi)</th><th>Khu vực</th><th>Trạng thái</th><th></th></tr></thead>
+                  <tbody>
+                    {paginatedData.length === 0 ? (
+                      <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Không có dữ liệu</td></tr>
+                    ) : (
+                      paginatedData.map(t => (
+                        <tr key={t.mags}>
+                          <td><strong>{t.hoten}</strong></td>
+                          <td>{t.sdt}</td>
+                          <td>{t.chuyennganh}</td>
+                          <td>{parseInt(t.hocphimongmuon || 0).toLocaleString()}đ</td>
+                          <td>{t.khuvucday || t.khuvuc}</td>
+                          <td><span className={`status-badge ${t.trangthai === 'DaDuyet' ? 'status-active' : 'status-pending'}`}>{t.trangthai}</span></td>
+                          <td><button className="btn btn-xs btn-indigo" onClick={() => openProfileModal('tutor', t.mags)}>Chi tiết</button></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPagination(filteredData.length)}
+              </div>
+            );
+          })()}
+
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && currentUser?.vaitro === 'BGD' && (
             <div className="glass-card" style={{ padding: '20px', maxWidth: '500px' }}>
@@ -1048,6 +1164,107 @@ function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* Revenue Chart */}
+      <div className="glass-card mt-4" style={{ padding: '20px' }}>
+        <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <DollarSign size={20} className="text-rose" /> Biểu Đồ Doanh Thu Theo Tháng
+        </h3>
+        <div style={{ width: '100%', height: '300px' }}>
+          {revenueData && revenueData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={revenueData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="month" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" tickFormatter={(value) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(value)} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} formatter={(value, name) => [new Intl.NumberFormat('vi-VN').format(value) + ' VNĐ', name]} />
+                <Legend />
+                <Bar dataKey="revenue" name="Doanh Thu (VNĐ)" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="profit" name="Lợi Nhuận Thực Tế (VNĐ)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '8px' }}>
+              Chưa có dữ liệu doanh thu để thống kê
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Profile Detail Modal */}
+      {profileModal && (
+        <div className="modal" style={{ display: 'flex' }} onClick={() => setProfileModal(null)}>
+          <div className="modal-content glass-card" style={{ maxWidth: '650px', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{profileModal.type === 'student' ? '📚 Hồ Sơ Học Viên' : '🎓 Hồ Sơ Gia Sư'}</h3>
+              <button className="btn btn-sm btn-secondary" onClick={() => setProfileModal(null)}>✕</button>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {loadingProfile || !profileModal.data ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Đang tải...</div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                    {profileModal.type === 'student' ? (
+                      <>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Họ tên</span><div style={{ fontWeight: 'bold' }}>{profileModal.data.hoten}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>SĐT</span><div>{profileModal.data.sdt}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Email</span><div>{profileModal.data.email || 'Chưa có'}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Địa chỉ</span><div>{profileModal.data.diachi || 'Chưa có'}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Cấp học</span><div>{profileModal.data.caphoc || 'Chưa có'}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Trường</span><div>{profileModal.data.truong || 'Chưa có'}</div></div>
+                      </>
+                    ) : (
+                      <>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Họ tên</span><div style={{ fontWeight: 'bold' }}>{profileModal.data.hoten}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>SĐT</span><div>{profileModal.data.sdt}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Email</span><div>{profileModal.data.email || 'Chưa có'}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Chuyên ngành</span><div>{profileModal.data.chuyennganh}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Trường ĐT</span><div>{profileModal.data.truonghoc || 'Chưa có'}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Học phí mong muốn</span><div>{parseInt(profileModal.data.hocphimongmuon || 0).toLocaleString()}đ/buổi</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Khu vực dạy</span><div>{profileModal.data.khuvucday || profileModal.data.khuvuc || 'Chưa có'}</div></div>
+                        <div><span style={{ color: '#94a3b8', fontSize: '12px' }}>Trạng thái</span><div><span className={`status-badge ${profileModal.data.trangthai === 'DaDuyet' ? 'status-active' : 'status-pending'}`}>{profileModal.data.trangthai}</span></div></div>
+                      </>
+                    )}
+                  </div>
+
+                  <h4 style={{ color: profileModal.type === 'student' ? 'var(--color-primary)' : 'var(--color-teal)', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
+                    {profileModal.type === 'student' ? '📖 Các lớp đang học' : '📖 Các lớp đang dạy'}
+                  </h4>
+                  {!profileModal.data.lophoc || profileModal.data.lophoc.length === 0 ? (
+                    <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px', fontStyle: 'italic' }}>Chưa có lớp nào</div>
+                  ) : (
+                    <table className="table" style={{ fontSize: '13px' }}>
+                      <thead>
+                        <tr>
+                          <th>Mã lớp</th>
+                          <th>Môn học</th>
+                          <th>{profileModal.type === 'student' ? 'Gia sư' : 'Học viên'}</th>
+                          <th>Cấp lớp</th>
+                          <th>Ngày bắt đầu</th>
+                          <th>Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profileModal.data.lophoc.map(l => (
+                          <tr key={l.malop}>
+                            <td>#{l.malop}</td>
+                            <td>{l.tenmh}</td>
+                            <td>{profileModal.type === 'student' ? l.tengiasu : l.tenhocvien}</td>
+                            <td>{l.caplop}</td>
+                            <td>{l.ngaybatdau ? new Date(l.ngaybatdau).toLocaleDateString('vi-VN') : 'Chưa xác định'}</td>
+                            <td><span className={`status-badge ${l.trangthai === 'DangDay' ? 'status-active' : l.trangthai === 'KetThuc' ? 'status-disabled' : 'status-pending'}`}>{l.trangthai}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Class Creation Modal */}
       {showClassModal && selectedRequest && (
