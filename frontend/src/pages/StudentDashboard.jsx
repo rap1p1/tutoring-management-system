@@ -281,22 +281,64 @@ function StudentDashboard() {
   };
 
   const handleStudentAbsenceClick = async (session) => {
+    const sessionDate = new Date(session.ngayday);
+    if (session.cahoc === 'Sang') sessionDate.setHours(7, 0, 0, 0);
+    else if (session.cahoc === 'Chieu') sessionDate.setHours(14, 0, 0, 0);
+    else if (session.cahoc === 'Toi') sessionDate.setHours(18, 0, 0, 0);
+
+    const now = new Date();
+    const diffHours = (sessionDate - now) / (1000 * 60 * 60);
+    const isLate = diffHours < 24 && diffHours > -24;
+
+    let htmlContent = `
+      <div style="text-align: left; font-size: 14px;">
+        <p>Nhập lý do xin nghỉ cho ngày <strong>${new Date(session.ngayday).toLocaleDateString('vi-VN')}</strong> (Ca <strong>${caHocLabel(session.cahoc)}</strong>):</p>
+        <textarea id="swal-input-lydo" class="swal2-textarea" style="margin-top: 10px; width: 90%; min-height: 80px;" placeholder="Nhập lý do xin nghỉ..."></textarea>
+    `;
+
+    if (isLate) {
+      htmlContent += `
+        <div style="margin-top: 15px; padding: 10px; border: 1px solid #ef4444; border-radius: 8px; background-color: rgba(239, 68, 68, 0.1);">
+          <strong style="color: #ef4444; display: block; margin-bottom: 5px;">⚠️ Cảnh báo: Bạn đang báo nghỉ sát giờ (< 24h)</strong>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #fff;">
+            <input type="checkbox" id="swal-input-batkhakhang" style="width: 16px; height: 16px; accent-color: #ef4444;" />
+            Tôi xác nhận đây là sự cố bất khả kháng
+          </label>
+        </div>
+      `;
+    }
+    
+    htmlContent += `</div>`;
+
     const reasonResult = await Swal.fire({
       title: 'Báo vắng học viên',
-      text: `Nhập lý do xin nghỉ cho ngày ${new Date(session.ngayday).toLocaleDateString('vi-VN')} (Ca ${caHocLabel(session.cahoc)}):`,
-      input: 'textarea',
-      inputPlaceholder: 'Nhập lý do xin nghỉ...',
+      html: htmlContent,
       showCancelButton: true,
       confirmButtonText: 'Báo vắng',
       cancelButtonText: 'Hủy',
       background: '#1e293b',
       color: '#fff',
-      inputValidator: (value) => {
-        if (!value) return 'Vui lòng nhập lý do!';
+      preConfirm: () => {
+        const lydo = document.getElementById('swal-input-lydo').value.trim();
+        if (!lydo) {
+          Swal.showValidationMessage('Vui lòng nhập lý do!');
+          return false;
+        }
+        if (isLate) {
+          const isChecked = document.getElementById('swal-input-batkhakhang').checked;
+          if (!isChecked) {
+            Swal.showValidationMessage('Vui lòng xác nhận đây là trường hợp bất khả kháng!');
+            return false;
+          }
+        }
+        return { lydo, isLate };
       }
     });
 
     if (reasonResult.isConfirmed && reasonResult.value) {
+      const { lydo, isLate } = reasonResult.value;
+      const finalLydo = isLate ? `[BẤT KHẢ KHÁNG] ${lydo}` : lydo;
+
       try {
         const res = await fetch('/api/hocvien/xinnghibuoi', {
           method: 'POST',
@@ -305,7 +347,7 @@ function StudentDashboard() {
             malop: selectedClassId,
             ngayday: getSessionDateString(session.ngayday),
             cahoc: session.cahoc,
-            lydo: reasonResult.value
+            lydo: finalLydo
           })
         });
         const json = await res.json();
@@ -533,11 +575,11 @@ function StudentDashboard() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                       <strong>{t.tenmh}</strong>
                       <span className={t.trangthai === 'DaNop' ? 'text-teal' : (t.trangthai === 'ChoXacNhan' ? 'text-warning' : 'text-rose')}>
-                        {parseInt(t.tonghocphi || 0).toLocaleString()}đ
+                        {Number(t.tonghocphi || 0).toLocaleString()}đ
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {t.sobuoi || 0} buổi × {parseInt(t.hocphimoibuoi || 0).toLocaleString()}đ
+                      {t.sobuoi || 0} buổi × {Number(t.hocphimoibuoi || 0).toLocaleString()}đ
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                       <span>
