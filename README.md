@@ -1,120 +1,151 @@
-# Hệ thống quản lý lớp dạy kèm
+# Hệ Thống Quản Lý Trung Tâm Gia Sư
 
-## Giới thiệu
-Đây là hệ thống phần mềm quản lý toàn diện các lớp dạy kèm tại một trung tâm gia sư. Hệ thống bao gồm 3 phân hệ chính được phân quyền rõ rệt dành cho: **Học viên**, **Gia sư**, và **Nhân viên quản lý (Admin)**. Hệ thống giúp số hóa và tối ưu toàn bộ quy trình từ khâu tiếp nhận yêu cầu học, tuyển chọn gia sư, quản lý điểm danh, cho đến theo dõi tài chính và xử lý các sự cố khẩn cấp.
+## Giới Thiệu
+Đây là hệ thống phần mềm quản lý toàn diện các lớp dạy kèm tại trung tâm gia sư. Hệ thống bao gồm 3 phân hệ chính được phân quyền rõ rệt: Học viên, Gia sư, và Nhân viên quản lý (Quản trị viên). Phần mềm giúp số hóa và tối ưu toàn bộ quy trình từ khâu tiếp nhận yêu cầu học, tuyển chọn gia sư, quản lý điểm danh, cho đến theo dõi tài chính và xử lý sự cố.
 
 ---
 
-##  Các Tính Năng Nổi Bật
+## Tính Năng Chính
 
-###  Phân hệ Học Viên (Student)
-- Gửi yêu cầu tìm gia sư với chi tiết (Môn học, cấp độ, thời gian, yêu cầu trình độ GS).
-- Theo dõi trạng thái tìm gia sư (Chờ ghép / Đã ghép).
-- Quản lý thông tin lớp học đang tham gia và học phí mỗi buổi.
-- Đánh giá chất lượng gia sư (Hệ thống Rating từ 1-5 sao kèm nhận xét).
-- Gửi báo cáo vắng mặt 1 buổi (Có cơ chế đánh dấu tình huống khẩn cấp bất khả kháng nếu sát giờ <24h).
+### Phân Hệ Học Viên
+- Gửi yêu cầu tìm gia sư với các thông tin chi tiết (môn học, cấp độ, thời gian, yêu cầu trình độ).
+- Theo dõi trạng thái tìm gia sư (chờ ghép lớp / đã ghép lớp).
+- Quản lý thông tin lớp học đang tham gia và thông tin học phí.
+- Gửi báo cáo vắng mặt cho từng buổi học (hỗ trợ khai báo tình huống khẩn cấp bất khả kháng).
 - Gửi yêu cầu đổi gia sư hoặc xin ngừng học.
+- Đăng nhập bằng tài khoản Google (OAuth 2.0).
 
-###  Phân hệ Gia Sư (Tutor)
-- Tạo và nộp hồ sơ xin làm gia sư (Cập nhật CCCD, bằng cấp, chuyên ngành, khu vực dạy).
-- Theo dõi trạng thái duyệt hồ sơ từ trung tâm.
-- Xem danh sách và thông tin chi tiết của các lớp đang được phân công giảng dạy.
-- **Ghi nhận buổi dạy**: Điểm danh (Đã dạy, Học viên vắng có/không phép).
-- Báo vắng mặt 1 buổi khẩn cấp (Hỗ trợ tình huống bất khả kháng <24h).
-- Yêu cầu xin nghỉ dạy (Bỏ lớp) kèm theo lý do.
+### Phân Hệ Gia Sư
+- Tạo và nộp hồ sơ đăng ký làm gia sư (cung cấp thông tin CCCD, bằng cấp, chuyên ngành, khu vực có thể giảng dạy).
+- Theo dõi trạng thái kiểm duyệt hồ sơ từ trung tâm.
+- Quản lý danh sách và thông tin chi tiết của các lớp được phân công.
+- Ghi nhận trạng thái buổi dạy (điểm danh học viên, báo cáo đã hoàn thành).
+- Báo vắng mặt buổi dạy (hỗ trợ khai báo sự cố khẩn cấp).
+- Yêu cầu xin nghỉ dạy dài hạn kèm lý do.
 
-###  Phân hệ Quản Trị Viên (Admin)
-- **Tổng quan (Dashboard):** Thống kê số lớp đang hoạt động, doanh thu, hồ sơ chờ duyệt, yêu cầu chờ ghép.
-- **Quản lý Gia sư:** Xem xét và phê duyệt / từ chối hồ sơ đăng ký của gia sư mới.
-- **Quản lý Lớp học:** Ghép cặp gia sư cho yêu cầu của học viên và khởi tạo lớp học mới. Cập nhật trạng thái và kết thúc lớp vĩnh viễn.
-- **Quản lý Tài chính:** 
-  - Duyệt đóng học phí của Học viên.
-  - Phê duyệt thanh toán hoa hồng cho Gia sư.
-- **Quản lý Hỗ trợ:** Nắm bắt lịch sử báo nghỉ từng buổi (nhận diện các ca khẩn cấp). Giải quyết yêu cầu đổi/nghỉ ngang của hai bên.
+### Phân Hệ Nhân Viên Quản Lý (Quản Trị Viên)
+- Bảng điều khiển (Dashboard) thống kê: số lượng lớp đang hoạt động, doanh thu, hồ sơ chờ duyệt, yêu cầu chờ xử lý.
+- Quản lý hồ sơ gia sư: xem xét, phê duyệt hoặc từ chối hồ sơ đăng ký mới.
+- Quản lý lớp học: ghép cặp gia sư cho yêu cầu của học viên, khởi tạo lớp học mới, theo dõi trạng thái và kết thúc lớp.
+- Quản lý tài chính: xác nhận đóng học phí của học viên, phê duyệt thanh toán hoa hồng cho gia sư.
+- Quản lý hỗ trợ: theo dõi lịch sử báo nghỉ, xử lý yêu cầu đổi gia sư hoặc nghỉ ngang.
+- Quản trị tài khoản: khóa hoặc mở khóa tài khoản người dùng vi phạm.
 
-###  Tính Năng Nâng Cao (Advanced Features)
-- **Biểu Đồ Thống Kê (Charts):** Tích hợp biểu đồ cột trực quan thống kê doanh thu theo từng tháng bằng thư viện `Recharts`.
-- **Xuất Báo Cáo Excel (Export XLSX):** Hỗ trợ xuất dữ liệu Danh Sách Lớp và Khoản Thu Học Phí ra file `.xlsx` chỉ với một cú click chuột.
-- **Gửi Email Tự Động (Email Automations):** Tự động gửi Email thông báo chúc mừng cho Gia sư ngay khi hồ sơ của họ được duyệt (Sử dụng `Nodemailer` và `Ethereal`).
-
----
-
-##  Công Nghệ Sử Dụng
-- **Giao diện (Frontend):** React.js, Vite, Vanilla CSS (Thiết kế theo xu hướng Glassmorphism hiện đại).
-- **Máy chủ (Backend):** Node.js, Express.js.
-- **Cơ sở dữ liệu (Database):** PostgreSQL.
-- **Thư viện Hỗ trợ:** `Recharts` (Vẽ biểu đồ), `XLSX` (Xuất file Excel), `Nodemailer` (Gửi Email).
+### Tính Năng Nâng Cao Và Bảo Mật
+- Thống kê trực quan bằng biểu đồ doanh thu theo thời gian thực.
+- Trích xuất dữ liệu danh sách lớp học và tài chính ra định dạng Excel (.xlsx).
+- Cơ chế gửi Email tự động: thông báo mã OTP đặt lại mật khẩu, gửi mã xác thực đăng nhập 2 lớp (2FA).
+- Đăng nhập thông qua Google OAuth 2.0.
+- Xác thực 2 lớp (2FA) sử dụng OTP gửi qua Email để tăng cường bảo mật tài khoản người dùng.
+- Lưu trữ hồ sơ, tài liệu (hình ảnh bằng cấp, CCCD, ảnh đại diện) an toàn thông qua dịch vụ đám mây Amazon S3.
 
 ---
 
-##  Cấu Trúc Thư Mục (Project Structure)
+## Kiến Trúc Công Nghệ
+
+- Máy chủ (Backend): Node.js, Express.js.
+- Giao diện (Frontend): React.js, Vite.
+- Cơ sở dữ liệu: PostgreSQL.
+- Dịch vụ bên thứ ba (Third-party Services):
+  - Amazon S3 (Lưu trữ tệp tin tĩnh).
+  - Google Identity Services (Đăng nhập OAuth 2.0).
+  - Google SMTP (Gửi Email tự động).
+
+---
+
+## Cấu Trúc Mã Nguồn
+
 ```text
 Gia_Su/
-├── node_modules/       # Thư mục chứa các thư viện (Sẽ tự động tải khi chạy npm install)
-├── backend/            # Mã nguồn máy chủ (Node.js/Express)
-│   ├── routes/         # Các API định tuyến (hocvien.js, giasu.js, nhanvien.js, lop.js, ...)
-│   ├── database.sql    # Script khởi tạo cơ sở dữ liệu PostgreSQL
-│   ├── package.json    # Cấu hình dự án backend
-│   └── server.js       # File khởi chạy máy chủ chính
-├── frontend/           # Mã nguồn giao diện (React.js/Vite)
-│   ├── public/         # Các tài nguyên tĩnh (hình ảnh, favicon...)
-│   ├── src/            # Mã nguồn chính của frontend
-│   │   ├── pages/      # Các trang giao diện (Home, Login, AdminDashboard, StudentDashboard, TutorDashboard)
-│   │   ├── App.jsx     # Component gốc điều hướng (Router)
-│   │   ├── index.css   # File CSS định dạng giao diện Glassmorphism
-│   │   └── main.jsx    # File khởi chạy React
-│   ├── package.json    # Cấu hình dự án frontend
-│   └── vite.config.js  # Cấu hình build tool Vite
-├── .gitignore          # File cấu hình ẩn các thư mục rác (như node_modules) khi đẩy lên GitHub
-└── README.md           # Tài liệu hướng dẫn dự án (File này)
+├── backend/            
+│   ├── routes/         # Khai báo các API (hocvien.js, giasu.js, nhanvien.js, lop.js, auth.js)
+│   ├── utils/          # Các hàm hỗ trợ (mailer.js, s3.js)
+│   ├── database.sql    # Tập lệnh tạo bảng và chèn dữ liệu gốc
+│   ├── alter_2fa.sql   # Tập lệnh cấu trúc cơ sở dữ liệu bổ sung
+│   ├── package.json    # Cấu hình dự án Node.js
+│   └── server.js       # Tệp khởi chạy máy chủ Express
+├── frontend/           
+│   ├── public/         # Tài nguyên tĩnh của giao diện
+│   ├── src/            
+│   │   ├── components/ # Các thành phần giao diện dùng chung
+│   │   ├── pages/      # Giao diện các trang nghiệp vụ
+│   │   ├── App.jsx     # Điều hướng (Router)
+│   │   └── main.jsx    # Điểm khởi chạy React
+│   ├── package.json    # Cấu hình dự án React
+│   └── vite.config.js  # Cấu hình công cụ đóng gói Vite
+└── README.md           # Tài liệu dự án
 ```
 
 ---
 
-##  Hướng Dẫn Cài Đặt (Local Environment)
+## Hướng Dẫn Cài Đặt Và Vận Hành
 
-### 1. Yêu cầu hệ thống
-- [Node.js](https://nodejs.org/) (Khuyến nghị phiên bản 16 trở lên)
-- [PostgreSQL](https://www.postgresql.org/) (Kèm công cụ pgAdmin 4)
+### Yêu Cầu Môi Trường
+- Node.js (Khuyến nghị phiên bản 18.x trở lên).
+- PostgreSQL (Kèm công cụ dòng lệnh `psql` hoặc pgAdmin 4).
+- Tài khoản Google Cloud (Để lấy Client ID cho OAuth).
+- Tài khoản AWS (Để lấy khóa truy cập IAM và cấu hình S3 Bucket).
+- Tài khoản Gmail (Cần tạo App Password để cấu hình hệ thống gửi mail tự động).
 
-### 2. Thiết lập cơ sở dữ liệu
-- Bật pgAdmin 4, tạo một cơ sở dữ liệu mới với tên là `Gia_Su`.
-- Mở Query Tool và chạy toàn bộ mã SQL có trong file `backend/database.sql` để tạo cấu trúc các bảng và chèn dữ liệu mẫu.
+### 1. Thiết Lập Cơ Sở Dữ Liệu
+Mở công cụ quản lý PostgreSQL, tạo cơ sở dữ liệu mới mang tên `Gia_Su`.
+Khởi chạy tệp tin `backend/database.sql` để thiết lập các bảng dữ liệu gốc.
+Khởi chạy tiếp tệp tin `backend/alter_2fa.sql` để bổ sung các bảng hỗ trợ tính năng bảo mật.
 
-### 3. Cài đặt và khởi chạy Backend
-1. Mở Terminal, di chuyển vào thư mục backend:
-   ```bash
-   cd backend
-   ```
-2. Cài đặt các thư viện cần thiết:
-   ```bash
-   npm install
-   ```
-3. Tạo một file `.env` ở trong thư mục `backend` và điền cấu hình kết nối Database của bạn:
-   ```env
-   DB_USER=postgres
-   DB_HOST=localhost
-   DB_NAME=Gia_Su
-   DB_PASSWORD=Mat_Khau_Cua_Ban
-   DB_PORT=5432
-   ```
-4. Khởi chạy máy chủ:
-   ```bash
-   npm run dev
-   ```
-   *(Server sẽ chạy tại cổng http://localhost:5000)*
+### 2. Cài Đặt Máy Chủ (Backend)
+Mở cửa sổ lệnh (Terminal) và di chuyển vào thư mục backend:
+```bash
+cd backend
+npm install
+```
 
-### 4. Cài đặt và khởi chạy Frontend
-1. Mở một cửa sổ Terminal mới, di chuyển vào thư mục frontend:
-   ```bash
-   cd frontend
-   ```
-2. Cài đặt thư viện:
-   ```bash
-   npm install
-   ```
-3. Khởi chạy giao diện người dùng:
-   ```bash
-   npm run dev
-   ```
-   *(Truy cập vào ứng dụng qua địa chỉ http://localhost:5173 trên trình duyệt)* 
+Tạo một tệp tin mang tên `.env` trong thư mục `backend` và điền cấu hình như mẫu sau:
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=Gia_Su
+DB_USER=postgres
+DB_PASSWORD=mat_khau_cua_ban
+PORT=3000
+
+# Google OAuth
+GOOGLE_CLIENT_ID=ma_ung_dung_google.apps.googleusercontent.com
+
+# Gmail SMTP
+SMTP_USER=email_cua_ban@gmail.com
+SMTP_PASS=mat_khau_ung_dung_16_ky_tu
+
+# AWS S3
+AWS_ACCESS_KEY_ID=ma_truy_cap_aws
+AWS_SECRET_ACCESS_KEY=khoa_bi_mat_aws
+AWS_REGION=ap-southeast-1
+AWS_S3_BUCKET=ten_bucket_cua_ban
+```
+
+Sau khi cấu hình xong, khởi chạy máy chủ:
+```bash
+npm run dev
+```
+Hệ thống máy chủ sẽ hoạt động tại địa chỉ: `http://localhost:3000`.
+
+### 3. Cài Đặt Giao Diện (Frontend)
+Mở một cửa sổ lệnh mới và di chuyển vào thư mục frontend:
+```bash
+cd frontend
+npm install
+```
+
+Bạn cần thay thế thông số cấu hình mã máy khách Google (Client ID) bên trong mã nguồn frontend nếu cần thiết, đảm bảo khớp với `GOOGLE_CLIENT_ID` đã cấu hình ở máy chủ.
+
+Khởi chạy môi trường phát triển giao diện:
+```bash
+npm run dev
+```
+Ứng dụng giao diện sẽ có thể truy cập thông qua trình duyệt tại địa chỉ: `http://localhost:5173`.
+
+---
+
+## Ghi Chú
+- Tùy theo cấu hình mạng và cài đặt môi trường của bạn, hãy đảm bảo các cổng `3000` và `5173` chưa bị chiếm dụng.
+- Dịch vụ Amazon S3 cần được cấu hình quyền cho phép đọc (Public Read) để ảnh có thể hiển thị chính xác trên nền tảng web.
+- Đối với luồng đăng nhập Google OAuth, bạn phải cấu hình thêm địa chỉ `http://localhost:5173` vào mục Authorized JavaScript origins trong Google Cloud Console.
