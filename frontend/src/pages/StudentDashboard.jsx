@@ -363,16 +363,30 @@ function StudentDashboard() {
     }
   };
 
-  const handlePayTuition = async (mahp) => {
+  const handlePayTuition = async (tuition) => {
+    const bankId = '970422'; // MB Bank (for example)
+    const accountNo = '0123456789';
+    const accountName = 'TRUNG TAM GIA SU';
+    const addInfo = `NOPHP ${tuition.mahp}`;
+    const amount = tuition.tonghocphi;
+    const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${accountName}`;
+
     const result = await Swal.fire({
-      title: 'Nộp học phí',
-      text: 'Bạn xác nhận muốn nộp học phí cho hóa đơn này?',
-      icon: 'question',
+      title: 'Thanh toán học phí qua QR',
+      html: `
+        <div style="text-align: center; margin-bottom: 15px;">
+          <p style="margin-bottom: 15px; color: #94a3b8; font-size: 14px;">Quét mã QR dưới đây bằng ứng dụng ngân hàng để thanh toán.</p>
+          <img src="${qrUrl}" alt="QR Code" style="max-width: 100%; border-radius: 8px; border: 2px solid rgba(255,255,255,0.1);" />
+          <p style="margin-top: 15px; font-weight: bold; color: #14b8a6; font-size: 18px;">Số tiền: ${new Intl.NumberFormat('vi-VN').format(amount)} VNĐ</p>
+          <p style="margin-top: 5px; color: #f43f5e; font-size: 13px;">Nội dung CK: <strong style="color: #fff;">${addInfo}</strong></p>
+          <p style="margin-top: 10px; font-size: 13px; color: #94a3b8;">Sau khi chuyển khoản thành công, vui lòng nhấn nút "Đã thanh toán" bên dưới.</p>
+        </div>
+      `,
       showCancelButton: true,
       confirmButtonColor: '#14b8a6',
       cancelButtonColor: '#64748b',
-      confirmButtonText: 'Xác nhận nộp',
-      cancelButtonText: 'Hủy',
+      confirmButtonText: 'Đã thanh toán',
+      cancelButtonText: 'Đóng',
       background: '#1e293b',
       color: '#fff'
     });
@@ -380,7 +394,7 @@ function StudentDashboard() {
     if (!result.isConfirmed) return;
 
     try {
-      const res = await fetch(`/api/hocvien/hocphi/${mahp}/nop`, {
+      const res = await fetch(`/api/hocvien/hocphi/${tuition.mahp}/nop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -588,7 +602,7 @@ function StudentDashboard() {
                       {t.trangthai === 'ChuaNop' && (
                         <button
                           className="btn btn-xs btn-teal"
-                          onClick={() => handlePayTuition(t.mahp)}
+                          onClick={() => handlePayTuition(t)}
                           style={{ padding: '2px 8px', fontSize: '11px' }}
                         >
                           Nộp học phí
