@@ -22,6 +22,15 @@ function Login() {
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [formSuccess, setFormSuccess] = useState('');
+  
+  // 2FA state
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFAToken, setTwoFAToken] = useState('');
+  const [twoFAEmail, setTwoFAEmail] = useState('');
+  const [twoFAError, setTwoFAError] = useState('');
+  const [twoFALoading, setTwoFALoading] = useState(false);
+  const [twoFAOtp, setTwoFAOtp] = useState('');
+  
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const navigate = useNavigate();
 
@@ -139,7 +148,12 @@ function Login() {
         body: JSON.stringify({ username, password })
       });
       const json = await res.json();
-      if (json.success) {
+      if (json.require2FA) {
+        setTwoFAToken(json.tempToken);
+        setTwoFAEmail(json.email);
+        setShow2FAModal(true);
+        setFormSuccess(json.message);
+      } else if (json.success) {
         const role = json.data.vaitro;
         if (role === 'HV') navigate('/student');
         else if (role === 'GS') navigate('/tutor');
@@ -149,6 +163,36 @@ function Login() {
       }
     } catch (err) {
       setFormError('Lỗi kết nối máy chủ');
+    }
+  };
+
+  // ============================================================
+  // XÁC MINH 2FA (LOGIN)
+  // ============================================================
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    setTwoFAError('');
+    setTwoFALoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tempToken: twoFAToken, otp: twoFAOtp })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setShow2FAModal(false);
+        const role = json.data.vaitro;
+        if (role === 'HV') navigate('/student');
+        else if (role === 'GS') navigate('/tutor');
+        else navigate('/admin');
+      } else {
+        setTwoFAError(json.message);
+      }
+    } catch (err) {
+      setTwoFAError('Lỗi kết nối máy chủ');
+    } finally {
+      setTwoFALoading(false);
     }
   };
 
@@ -839,6 +883,44 @@ function Login() {
 
       {/* Forgot Password Modal */}
       {renderForgotPassword()}
+      {/* 2FA Modal */}
+      {show2FAModal && (
+        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>Xác thực 2 lớp</h3>
+              <span className="close-btn" onClick={() => setShow2FAModal(false)}>&times;</span>
+            </div>
+            <div className="card-body">
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '15px' }}>
+                Vui lòng nhập mã OTP gồm 6 chữ số vừa được gửi đến email <strong>{twoFAEmail}</strong> để hoàn tất đăng nhập.
+              </p>
+              {twoFAError && (
+                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444', padding: '10px', borderRadius: '6px', marginBottom: '15px' }}>
+                  {twoFAError}
+                </div>
+              )}
+              <form onSubmit={handleVerify2FA}>
+                <div className="form-group">
+                  <input
+                    type="text"
+                    maxLength="6"
+                    value={twoFAOtp}
+                    onChange={(e) => setTwoFAOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Mã OTP 6 số"
+                    style={{ textAlign: 'center', fontSize: '24px', letterSpacing: '4px', fontWeight: 'bold' }}
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn btn-teal btn-block" disabled={twoFALoading}>
+                  {twoFALoading ? 'Đang xác minh...' : 'Xác minh'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

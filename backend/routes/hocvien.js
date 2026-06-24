@@ -8,7 +8,12 @@ function auth(req) { return req.session.user; }
 router.get('/me', async (req, res) => {
   if (!auth(req)) return res.json({ success: false, message: 'Chưa đăng nhập' });
   try {
-    const r = await pool(req).query('SELECT * FROM hocvien WHERE matk=$1', [auth(req).matk]);
+    const r = await pool(req).query(`
+      SELECT h.*, t.is2faenabled 
+      FROM hocvien h 
+      JOIN taikhoan t ON h.matk = t.matk 
+      WHERE h.matk=$1
+    `, [auth(req).matk]);
     res.json({ success: true, data: r.rows[0] });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });

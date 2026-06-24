@@ -139,13 +139,18 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Lấy thông tin cá nhân của gia sư
+// Lấy thông tin hồ sơ của chính gia sư đang đăng nhập
 router.get('/me', async (req, res) => {
-  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  if (!auth(req)) return res.json({ success: false, message: 'Chưa đăng nhập' });
   try {
-    const r = await pool(req).query('SELECT * FROM giasu WHERE matk = $1', [auth(req).matk]);
-    if (!r.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
-    res.json({ success: true, data: r.rows[0] });
+    const gsR = await pool(req).query(`
+      SELECT g.*, t.is2faenabled 
+      FROM giasu g
+      JOIN taikhoan t ON g.matk = t.matk
+      WHERE g.matk=$1
+    `, [auth(req).matk]);
+    if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ' });
+    res.json({ success: true, data: gsR.rows[0] });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 

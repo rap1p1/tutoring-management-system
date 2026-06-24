@@ -323,4 +323,76 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+// ============================================================
+// XÁC MINH OTP ĐĂNG NHẬP (2FA)
+// ============================================================
+router.post('/verify-2fa', async (req, res) => {
+  try {
+    const { tempToken, otp } = req.body;
+    if (!tempToken || !otp) {
+      return res.json({ success: false, message: 'Thiếu mã xác thực' });
+    }
+
+    const otpResult = await pool(req).query(
+      `SELECT o.*, t.tendangnhap, t.vaitro 
+       FROM otp_2fa o
+       JOIN taikhoan t ON t.matk = o.matk
+       WHERE temptoken = $1 AND hethan > NOW() AND dasudung = FALSE
+       LIMIT 1`,
+      [tempToken]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.json({ success: false, message: 'Phiên xác thực đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.' });
+    }
+
+    const record = otpResult.rows[0];
+    const bcrypt = req.app.locals.bcrypt;
+    const isMatch = await bcrypt.compare(otp.toString(), record.otphash);
+
+    if (!isMatch) {
+      return res.json({ success: false, message: 'Mã OTP không đúng' });
+    }
+
+    // OTP hợp lệ
+    await pool(req).query('UPDATE otp_2fa SET dasudung = TRUE WHERE maotp = $1', [record.maotp]);
+
+    // Tạo session
+    req.session.user = { matk: record.matk, tendangnhap: record.tendangnhap, vaitro: record.vaitro };
+    res.json({ success: true, data: { vaitro: record.vaitro }, message: 'Xác thực thành công' });
+  } catch (e) {
+    console.error('Verify 2FA error:', e);
+    res.json({ success: false, message: 'Lỗi server' });
+  }
+});
+
+// ============================================================
+// BẬT / TẮT 2FA (Yêu cầu đăng nhập)
+// ============================================================
+router.put('/toggle-2fa', async (req, res) => {
+  if (!req.session.user) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  
+  try {
+    const { enabled } = req.body; // boolean
+    
+    // Kiểm tra xem user có email chưa
+    if (enabled) {
+      const tkResult = await pool(req).query('SELECT email FROM taikhoan WHERE matk = $1', [req.session.user.matk]);
+      if (!tkResult.rows[0].email) {
+        return res.json({ success: false, message: 'Vui lòng cập nhật Email trong hồ sơ cá nhân trước khi bật 2FA.' });
+      }
+    }
+
+    await pool(req).query(
+      'UPDATE taikhoan SET is2faenabled = $1 WHERE matk = $2',
+      [enabled, req.session.user.matk]
+    );
+
+    res.json({ success: true, message: enabled ? 'Đã BẬT xác thực 2 lớp' : 'Đã TẮT xác thực 2 lớp' });
+  } catch (e) {
+    console.error('Toggle 2FA error:', e);
+    res.json({ success: false, message: 'Lỗi server' });
+  }
+});
+
 module.exports = router;

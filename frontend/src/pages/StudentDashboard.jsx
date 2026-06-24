@@ -132,6 +132,43 @@ function StudentDashboard() {
     }
   };
 
+  const handleToggle2FA = async () => {
+    const newStatus = !profile.is2faenabled;
+    const confirmMsg = newStatus 
+      ? 'Bạn có chắc chắn muốn BẬT xác thực 2 lớp? Mã OTP sẽ được gửi về email của bạn mỗi khi đăng nhập.'
+      : 'Bạn có chắc chắn muốn TẮT xác thực 2 lớp? Tài khoản của bạn sẽ giảm đi một lớp bảo vệ.';
+    
+    const result = await Swal.fire({
+      title: 'Xác nhận',
+      text: confirmMsg,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await fetch('/api/auth/toggle-2fa', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newStatus })
+      });
+      const json = await res.json();
+      if (json.success) {
+        Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        fetchData();
+      } else {
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    } catch (e) {
+      Swal.fire({ title: 'Lỗi kết nối', text: 'Không thể kết nối đến máy chủ', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
+  };
+
   const handleAddRequest = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -501,9 +538,17 @@ function StudentDashboard() {
           <div className="glass-card mb-4">
             <div className="card-header justify-between">
               <h3>Hồ Sơ Cá Nhân</h3>
-              <button className="btn btn-sm btn-secondary" onClick={() => setShowProfileModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                Cập nhật hồ sơ
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
+                  onClick={handleToggle2FA}
+                >
+                  {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={() => setShowProfileModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  Cập nhật hồ sơ
+                </button>
+              </div>
             </div>
             <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Mã Học Viên (ID)</strong> {profile.mahv ? 'HV' + profile.mahv.toString().padStart(6, '0') : ''}</div>
