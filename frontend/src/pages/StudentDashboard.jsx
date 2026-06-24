@@ -18,6 +18,7 @@ function StudentDashboard() {
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [classSessions, setClassSessions] = useState([]);
@@ -103,6 +104,34 @@ function StudentDashboard() {
     return result;
   };
 
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      setModalMsg({ text: '', type: '' });
+      const res = await fetch('/api/hocvien/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await res.json();
+      if (json.success) {
+        setModalMsg({ text: 'Cập nhật hồ sơ thành công!', type: 'success' });
+        fetchData();
+        setTimeout(() => {
+          setShowProfileModal(false);
+          setModalMsg({ text: '', type: '' });
+        }, 1500);
+      } else {
+        setModalMsg({ text: json.message, type: 'error' });
+      }
+    } catch (e) {
+      setModalMsg({ text: 'Lỗi kết nối', type: 'error' });
+    }
+  };
+
   const handleAddRequest = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -125,7 +154,7 @@ function StudentDashboard() {
           hinhthuchoc: data.hinhthuc,
           yc_gioitinhgs: data.gioitinh,
           yc_trinhdogs: data.trinhdo,
-          songayhoc: 20,
+          songayhoc: 0,
           lichhoctrongtuan: JSON.stringify(lichHoc),
           diachi: data.diachi,
           ghichu: data.ghichu
@@ -470,13 +499,19 @@ function StudentDashboard() {
       <div className="dashboard-grid">
         <div className="grid-col-8">
           <div className="glass-card mb-4">
-            <h3>Hồ Sơ Cá Nhân</h3>
+            <div className="card-header justify-between">
+              <h3>Hồ Sơ Cá Nhân</h3>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowProfileModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                Cập nhật hồ sơ
+              </button>
+            </div>
             <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Mã Học Viên (ID)</strong> {profile.mahv ? 'HV' + profile.mahv.toString().padStart(6, '0') : ''}</div>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Họ và tên</strong> {profile.hoten}</div>
-              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Ngày sinh</strong> {new Date(profile.ngaysinh).toLocaleDateString('vi-VN')}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Ngày sinh</strong> {profile.ngaysinh ? new Date(profile.ngaysinh).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}</div>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Số điện thoại</strong> {profile.sdt}</div>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Email</strong> {profile.email || 'Không có'}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Địa chỉ</strong> {profile.diachi || 'Chưa cập nhật'}</div>
             </div>
           </div>
 
@@ -616,6 +651,49 @@ function StudentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Profile Update Modal */}
+      {showProfileModal && (
+        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Cập Nhật Hồ Sơ Cá Nhân</h3>
+              <span className="close-btn" onClick={() => { setShowProfileModal(false); setModalMsg({ text: '', type: '' }); }}>&times;</span>
+            </div>
+
+            {modalMsg.text && (
+              <div style={{
+                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
+                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
+                padding: '10px', borderRadius: '6px', marginBottom: '15px'
+              }}>
+                {modalMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProfile}>
+              <div className="form-group">
+                <label>Họ và tên *</label>
+                <input type="text" name="hoten" defaultValue={profile.hoten} required />
+              </div>
+              <div className="form-group">
+                <label>Số điện thoại *</label>
+                <input type="tel" name="sdt" defaultValue={profile.sdt !== 'Chưa cập nhật' ? profile.sdt : ''} required placeholder="Ví dụ: 0987654321" />
+              </div>
+              <div className="form-group">
+                <label>Ngày sinh</label>
+                <input type="date" name="ngaysinh" defaultValue={profile.ngaysinh ? profile.ngaysinh.split('T')[0] : ''} />
+              </div>
+              <div className="form-group">
+                <label>Địa chỉ</label>
+                <input type="text" name="diachi" defaultValue={profile.diachi || ''} placeholder="Quận/Huyện, TP..." />
+              </div>
+              <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '15px' }}>Lưu Thay Đổi</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Request Modal - ĐƠN GIẢN HÓA */}
       {showRequestModal && (
