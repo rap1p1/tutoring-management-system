@@ -13,10 +13,11 @@ const BUCKET = process.env.AWS_S3_BUCKET;
 /**
  * Upload ảnh base64 lên S3
  * @param {string} base64Str - Chuỗi base64 (data:image/png;base64,...)
- * @param {string} prefix - Tiền tố tên file (vd: 'cccd', 'bangcap', 'avatar')
+ * @param {string} prefix - Tiền tố loại ảnh (vd: 'cccd', 'bangcap', 'avatar')
+ * @param {string} username - Tên đăng nhập của user để format tên file (tùy chọn)
  * @returns {string|null} URL public của ảnh trên S3, hoặc null nếu lỗi
  */
-async function uploadToS3(base64Str, prefix) {
+async function uploadToS3(base64Str, prefix, username = '') {
   if (!base64Str || typeof base64Str !== 'string') return null;
   const match = base64Str.match(/^data:image\/(\w+);base64,(.+)$/);
   if (!match) return null;
@@ -25,7 +26,9 @@ async function uploadToS3(base64Str, prefix) {
   const data = match[2];
   const buffer = Buffer.from(data, 'base64');
 
-  const key = `giasu/${prefix}_${Date.now()}_${Math.round(Math.random() * 1e9)}.${ext}`;
+  // Làm sạch username (loại bỏ ký tự đặc biệt, dấu cách) để an toàn làm tên file
+  const safeUsername = username ? username.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '_' : '';
+  const key = `giasu/${safeUsername}${prefix}_${Date.now()}.${ext}`;
 
   const command = new PutObjectCommand({
     Bucket: BUCKET,

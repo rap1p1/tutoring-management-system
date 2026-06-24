@@ -8,12 +8,12 @@ function auth(req) { return req.session.user; }
 /**
  * Upload ảnh base64 → S3 (hoặc local fallback nếu chưa cấu hình AWS)
  */
-async function saveBase64Image(base64Str, prefix) {
+async function saveBase64Image(base64Str, prefix, username = '') {
   if (!base64Str || typeof base64Str !== 'string') return null;
 
   // Nếu có cấu hình AWS → upload lên S3
   if (process.env.AWS_S3_BUCKET) {
-    return await uploadToS3(base64Str, prefix);
+    return await uploadToS3(base64Str, prefix, username);
   }
 
   // Fallback: lưu local (giữ tương thích khi chưa cấu hình S3)
@@ -26,7 +26,8 @@ async function saveBase64Image(base64Str, prefix) {
   const data = match[2];
   const buffer = Buffer.from(data, 'base64');
   
-  const filename = `${prefix}_${Date.now()}_${Math.round(Math.random() * 1e9)}.${ext}`;
+  const safeUsername = username ? username.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '_' : '';
+  const filename = `${safeUsername}${prefix}_${Date.now()}.${ext}`;
   const dirPath = path.join(__dirname, '../uploads');
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
@@ -106,10 +107,10 @@ router.post('/register', async (req, res) => {
       );
       const matk = tkResult.rows[0].matk;
 
-      const anhcccdPath = await saveBase64Image(anhcccd, 'cccd');
-      const anhbangcapPath = await saveBase64Image(anhbangcap, 'bangcap');
-      const anhthesinhvienPath = await saveBase64Image(anhthesinhvien, 'thesv');
-      let anhdaidienPath = await saveBase64Image(anhdaidien, 'avatar');
+      const anhcccdPath = await saveBase64Image(anhcccd, 'cccd', username);
+      const anhbangcapPath = await saveBase64Image(anhbangcap, 'bangcap', username);
+      const anhthesinhvienPath = await saveBase64Image(anhthesinhvien, 'thesv', username);
+      let anhdaidienPath = await saveBase64Image(anhdaidien, 'avatar', username);
 
       const gsResult = await client.query(
         `INSERT INTO giasu (matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien) 
@@ -387,16 +388,17 @@ router.post('/me/update', async (req, res) => {
     
     let avatarPath = gsR.rows[0].anhdaidien;
     let diplomaPath = gsR.rows[0].anhbangcap;
+    const username = auth(req).tendangnhap;
     
     if (anhdaidien && typeof anhdaidien === 'string' && anhdaidien.startsWith('data:image')) {
-      const newAvatarPath = await saveBase64Image(anhdaidien, 'avatar');
+      const newAvatarPath = await saveBase64Image(anhdaidien, 'avatar', username);
       if (newAvatarPath) {
         await deleteOldImage(avatarPath);
         avatarPath = newAvatarPath;
       }
     }
     if (anhbangcap && typeof anhbangcap === 'string' && anhbangcap.startsWith('data:image')) {
-      const newDiplomaPath = await saveBase64Image(anhbangcap, 'bangcap');
+      const newDiplomaPath = await saveBase64Image(anhbangcap, 'bangcap', username);
       if (newDiplomaPath) {
         await deleteOldImage(diplomaPath);
         diplomaPath = newDiplomaPath;
