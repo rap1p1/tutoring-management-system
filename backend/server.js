@@ -54,6 +54,8 @@ app.post('/api/auth/login', async (req, res) => {
     if (result.rows.length === 0) return res.json({ success: false, message: 'Sai tên đăng nhập hoặc mật khẩu' });
     const tk = result.rows[0];
     if (tk.trangthai === 'Khoa') return res.json({ success: false, message: 'Tài khoản đã bị khóa' });
+    // Tài khoản Google không có mật khẩu → không cho login bằng form thường
+    if (!tk.matkhau) return res.json({ success: false, message: 'Tài khoản này sử dụng đăng nhập Google. Vui lòng nhấn nút "Đăng nhập bằng Google".' });
     const ok = await bcrypt.compare(password, tk.matkhau);
     if (!ok) return res.json({ success: false, message: 'Sai tên đăng nhập hoặc mật khẩu' });
     req.session.user = { matk: tk.matk, tendangnhap: tk.tendangnhap, vaitro: tk.vaitro };
@@ -133,6 +135,7 @@ app.use('/api/hocvien',   require('./routes/hocvien'));
 app.use('/api/giasu',     require('./routes/giasu'));
 app.use('/api/lop',       require('./routes/lop'));
 app.use('/api/nhanvien',  require('./routes/nhanvien'));
+app.use('/api/auth',      require('./routes/auth'));
 
 // ============================================================
 // SEED DATA (tạo tài khoản mặc định)

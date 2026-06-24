@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('../utils/mailer');
 
 function pool(req) { return req.app.locals.pool; }
 function auth(req) { return req.session.user; }
@@ -103,39 +103,23 @@ router.post('/giasu/:id/duyet', requireOps, async (req, res) => {
       [status, manv, id]
     );
 
-    // Bắt đầu gửi Email tự động nếu duyệt thành công và GS có email
+    // Gửi email thông báo duyệt (dùng Gmail SMTP thật)
     if (status === 'DaDuyet' && gsR.rows.length > 0 && gsR.rows[0].email) {
       const gsEmail = gsR.rows[0].email;
       const gsName = gsR.rows[0].hoten;
       
-      // Tạo tài khoản test Ethereal
-      nodemailer.createTestAccount((err, account) => {
-        if (!err) {
-          let transporter = nodemailer.createTransport({
-            host: account.smtp.host,
-            port: account.smtp.port,
-            secure: account.smtp.secure,
-            auth: { user: account.user, pass: account.pass }
-          });
-
-          let mailOptions = {
-            from: '"Trung Tâm Gia Sư" <admin@giasu.edu.vn>',
-            to: gsEmail,
-            subject: '🎉 Chúc mừng bạn đã trở thành Gia Sư chính thức!',
-            html: `<h3>Chào ${gsName},</h3>
-                   <p>Hồ sơ đăng ký làm gia sư của bạn đã được <b>duyệt thành công</b>!</p>
-                   <p>Bây giờ bạn có thể đăng nhập vào hệ thống để bắt đầu nhận lớp và giảng dạy.</p>
-                   <br/>
-                   <p>Trân trọng,<br/>Ban Quản Lý Trung Tâm Gia Sư</p>`
-          };
-
-          transporter.sendMail(mailOptions, (error, info) => {
-            if (!error) {
-              console.log('✅ Đã gửi email tự động thành công!');
-              console.log('👀 Xem giao diện Email tại link này: %s', nodemailer.getTestMessageUrl(info));
-            }
-          });
-        }
+      sendEmail({
+        to: gsEmail,
+        subject: '🎉 Chúc mừng bạn đã trở thành Gia Sư chính thức!',
+        html: `<h3>Chào ${gsName},</h3>
+               <p>Hồ sơ đăng ký làm gia sư của bạn đã được <b>duyệt thành công</b>!</p>
+               <p>Bây giờ bạn có thể đăng nhập vào hệ thống để bắt đầu nhận lớp và giảng dạy.</p>
+               <br/>
+               <p>Trân trọng,<br/>Ban Quản Lý Trung Tâm Gia Sư</p>`
+      }).then(() => {
+        console.log('✅ Đã gửi email thông báo duyệt gia sư tới:', gsEmail);
+      }).catch(err => {
+        console.error('❌ Gửi email duyệt thất bại:', err);
       });
     }
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, X } from 'lucide-react';
+import { Eye, EyeOff, X, Mail, KeyRound, ShieldCheck, ArrowLeft } from 'lucide-react';
 
 const fileToBase64 = (file) => {
   return new Promise((resolve, reject) => {
@@ -10,6 +10,9 @@ const fileToBase64 = (file) => {
     reader.onerror = (error) => reject(error);
   });
 };
+
+// Google Client ID từ biến môi trường Vite (hoặc hardcode tạm)
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function Login() {
   const [activeTab, setActiveTab] = useState('login');
@@ -21,6 +24,88 @@ function Login() {
   const [formSuccess, setFormSuccess] = useState('');
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const navigate = useNavigate();
+
+  // === Quên mật khẩu state ===
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [fpStep, setFpStep] = useState(1); // 1: email, 2: OTP, 3: new password
+  const [fpEmail, setFpEmail] = useState('');
+  const [fpOtp, setFpOtp] = useState('');
+  const [fpNewPassword, setFpNewPassword] = useState('');
+  const [fpResetToken, setFpResetToken] = useState('');
+  const [fpLoading, setFpLoading] = useState(false);
+  const [fpError, setFpError] = useState('');
+  const [fpSuccess, setFpSuccess] = useState('');
+  const [fpNewPassVisible, setFpNewPassVisible] = useState(false);
+
+  // === Google Sign-In ===
+  const googleBtnRef = useRef(null);
+
+  useEffect(() => {
+    // Khởi tạo Google Identity Services khi component mount
+    if (GOOGLE_CLIENT_ID && window.google && window.google.accounts) {
+      initGoogleSignIn();
+    } else if (GOOGLE_CLIENT_ID) {
+      // Chờ script load xong
+      const checkGoogle = setInterval(() => {
+        if (window.google && window.google.accounts) {
+          clearInterval(checkGoogle);
+          initGoogleSignIn();
+        }
+      }, 200);
+      return () => clearInterval(checkGoogle);
+    }
+  }, [activeTab]);
+
+  function initGoogleSignIn() {
+    if (!googleBtnRef.current || !GOOGLE_CLIENT_ID) return;
+    try {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        auto_select: false,
+      });
+      // Xóa nội dung cũ trước khi render lại
+      googleBtnRef.current.innerHTML = '';
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'filled_black',
+        size: 'large',
+        width: '100%',
+        text: 'signin_with',
+        shape: 'rectangular',
+        locale: 'vi',
+      });
+    } catch (err) {
+      console.error('Google Sign-In init error:', err);
+    }
+  }
+
+  async function handleGoogleCredential(response) {
+    try {
+      setFormError('');
+      setFormSuccess('');
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      });
+      const json = await res.json();
+      if (json.success) {
+        if (json.isNew) {
+          setFormSuccess('Tạo tài khoản thành công qua Google! Đang chuyển hướng...');
+        }
+        const role = json.data.vaitro;
+        setTimeout(() => {
+          if (role === 'HV') navigate('/student');
+          else if (role === 'GS') navigate('/tutor');
+          else navigate('/admin');
+        }, json.isNew ? 1000 : 0);
+      } else {
+        setFormError(json.message);
+      }
+    } catch (err) {
+      setFormError('Lỗi kết nối máy chủ');
+    }
+  }
 
   const handleDistrictChange = (e) => {
     const value = e.target.value;
@@ -64,6 +149,111 @@ function Login() {
       }
     } catch (err) {
       setFormError('Lỗi kết nối máy chủ');
+    }
+  };
+
+  // ============================================================
+  // QUÊN MẬT KHẨU — 3 Bước
+  // ============================================================
+
+  const openForgotPassword = () => {
+    setShowForgotPassword(true);
+    setFpStep(1);
+    setFpEmail('');
+    setFpOtp('');
+    setFpNewPassword('');
+    setFpResetToken('');
+    setFpError('');
+    setFpSuccess('');
+    setFormError('');
+  };
+
+  const closeForgotPassword = () => {
+    setShowForgotPassword(false);
+    setFpStep(1);
+    setFpError('');
+    setFpSuccess('');
+  };
+
+  // Bước 1: Gửi OTP
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setFpError('');
+    setFpLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: fpEmail })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setFpStep(2);
+        setFpSuccess('Đã gửi mã OTP đến email ' + fpEmail);
+      } else {
+        setFpError(json.message);
+      }
+    } catch (err) {
+      setFpError('Lỗi kết nối');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  // Bước 2: Xác minh OTP
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setFpError('');
+    setFpLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: fpEmail, otp: fpOtp })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setFpResetToken(json.resetToken);
+        setFpStep(3);
+        setFpSuccess('Xác minh thành công! Nhập mật khẩu mới.');
+      } else {
+        setFpError(json.message);
+      }
+    } catch (err) {
+      setFpError('Lỗi kết nối');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  // Bước 3: Đặt mật khẩu mới
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setFpError('');
+    if (fpNewPassword.length < 6) {
+      return setFpError('Mật khẩu mới phải từ 6 ký tự trở lên');
+    }
+    setFpLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resetToken: fpResetToken, newPassword: fpNewPassword })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setFpSuccess('Đặt lại mật khẩu thành công!');
+        setFormSuccess('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
+        setTimeout(() => {
+          closeForgotPassword();
+        }, 1500);
+      } else {
+        setFpError(json.message);
+      }
+    } catch (err) {
+      setFpError('Lỗi kết nối');
+    } finally {
+      setFpLoading(false);
     }
   };
 
@@ -196,6 +386,203 @@ function Login() {
     }
   };
 
+  // ============================================================
+  // RENDER — Quên Mật Khẩu Modal
+  // ============================================================
+  const renderForgotPassword = () => {
+    if (!showForgotPassword) return null;
+
+    const stepLabels = ['Nhập Email', 'Xác minh OTP', 'Mật khẩu mới'];
+
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+      }}>
+        <div style={{
+          background: 'linear-gradient(145deg, #1e293b, #0f172a)',
+          borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '440px',
+          border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+          position: 'relative'
+        }}>
+          {/* Nút đóng */}
+          <button
+            onClick={closeForgotPassword}
+            style={{
+              position: 'absolute', top: '12px', right: '12px', background: 'none',
+              border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px'
+            }}
+          >
+            <X size={20} />
+          </button>
+
+          {/* Header */}
+          <h3 style={{ textAlign: 'center', color: '#f8fafc', marginBottom: '8px', fontSize: '20px' }}>
+            🔑 Quên mật khẩu
+          </h3>
+
+          {/* Step Indicator */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '24px' }}>
+            {stepLabels.map((label, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '13px', fontWeight: '600',
+                  background: fpStep > i + 1 ? '#10b981' : fpStep === i + 1 ? '#14b8a6' : '#334155',
+                  color: fpStep >= i + 1 ? '#fff' : '#94a3b8',
+                  transition: 'all 0.3s ease'
+                }}>
+                  {fpStep > i + 1 ? '✓' : i + 1}
+                </div>
+                <span style={{
+                  fontSize: '12px', color: fpStep === i + 1 ? '#14b8a6' : '#64748b',
+                  fontWeight: fpStep === i + 1 ? '600' : '400', display: i < 2 ? 'inline' : 'inline'
+                }}>
+                  {label}
+                </span>
+                {i < 2 && <span style={{ color: '#334155', margin: '0 2px' }}>→</span>}
+              </div>
+            ))}
+          </div>
+
+          {/* Error/Success */}
+          {fpError && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+              border: '1px solid #ef4444', padding: '10px', borderRadius: '8px',
+              marginBottom: '16px', fontSize: '14px', textAlign: 'center'
+            }}>
+              {fpError}
+            </div>
+          )}
+          {fpSuccess && !fpError && (
+            <div style={{
+              backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981',
+              border: '1px solid #10b981', padding: '10px', borderRadius: '8px',
+              marginBottom: '16px', fontSize: '14px', textAlign: 'center'
+            }}>
+              {fpSuccess}
+            </div>
+          )}
+
+          {/* Bước 1: Nhập Email */}
+          {fpStep === 1 && (
+            <form onSubmit={handleSendOtp}>
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px', textAlign: 'center' }}>
+                Nhập email đã đăng ký để nhận mã OTP
+              </p>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Mail size={16} /> Email
+                </label>
+                <input
+                  type="email"
+                  value={fpEmail}
+                  onChange={e => setFpEmail(e.target.value)}
+                  placeholder="example@gmail.com"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary btn-block"
+                disabled={fpLoading}
+                style={{ opacity: fpLoading ? 0.7 : 1 }}
+              >
+                {fpLoading ? 'Đang gửi...' : 'Gửi mã OTP'}
+              </button>
+            </form>
+          )}
+
+          {/* Bước 2: Nhập OTP */}
+          {fpStep === 2 && (
+            <form onSubmit={handleVerifyOtp}>
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px', textAlign: 'center' }}>
+                Nhập mã OTP 6 số đã gửi đến <strong style={{ color: '#14b8a6' }}>{fpEmail}</strong>
+              </p>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={16} /> Mã OTP
+                </label>
+                <input
+                  type="text"
+                  value={fpOtp}
+                  onChange={e => setFpOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="______"
+                  maxLength={6}
+                  required
+                  style={{ letterSpacing: '8px', textAlign: 'center', fontSize: '24px', fontWeight: 'bold' }}
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary btn-block"
+                disabled={fpLoading || fpOtp.length !== 6}
+                style={{ opacity: (fpLoading || fpOtp.length !== 6) ? 0.7 : 1 }}
+              >
+                {fpLoading ? 'Đang xác minh...' : 'Xác minh OTP'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setFpStep(1); setFpError(''); setFpSuccess(''); }}
+                style={{
+                  background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
+                  marginTop: '12px', fontSize: '13px', display: 'flex', alignItems: 'center',
+                  gap: '4px', margin: '12px auto 0'
+                }}
+              >
+                <ArrowLeft size={14} /> Quay lại nhập email
+              </button>
+            </form>
+          )}
+
+          {/* Bước 3: Mật khẩu mới */}
+          {fpStep === 3 && (
+            <form onSubmit={handleResetPassword}>
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px', textAlign: 'center' }}>
+                Nhập mật khẩu mới (tối thiểu 6 ký tự)
+              </p>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <KeyRound size={16} /> Mật khẩu mới
+                </label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type={fpNewPassVisible ? "text" : "password"}
+                    value={fpNewPassword}
+                    onChange={e => setFpNewPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu mới"
+                    style={{ flex: 1 }}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 12px', display: 'flex', alignItems: 'center' }}
+                    onClick={() => setFpNewPassVisible(!fpNewPassVisible)}
+                  >
+                    {fpNewPassVisible ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="btn btn-teal btn-block"
+                disabled={fpLoading}
+                style={{ opacity: fpLoading ? 0.7 : 1 }}
+              >
+                {fpLoading ? 'Đang xử lý...' : 'Đặt lại mật khẩu'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="auth-wrapper" style={{ marginTop: '40px', maxWidth: '600px', margin: '40px auto' }}>
       <div className="auth-tabs">
@@ -224,7 +611,7 @@ function Login() {
               <label>Tên đăng nhập</label>
               <input type="text" name="username" required />
             </div>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
+            <div className="form-group" style={{ marginBottom: '12px' }}>
               <label>Mật khẩu</label>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <input type={passwordVisible ? "text" : "password"} name="password" style={{ flex: 1 }} required />
@@ -233,8 +620,47 @@ function Login() {
                 </button>
               </div>
             </div>
+            
+            {/* Link Quên mật khẩu */}
+            <div style={{ textAlign: 'right', marginBottom: '20px' }}>
+              <button
+                type="button"
+                onClick={openForgotPassword}
+                style={{
+                  background: 'none', border: 'none', color: '#14b8a6',
+                  cursor: 'pointer', fontSize: '13px', textDecoration: 'underline',
+                  padding: 0
+                }}
+              >
+                Quên mật khẩu?
+              </button>
+            </div>
+            
             <button type="submit" className="btn btn-primary btn-block">Đăng Nhập</button>
           </form>
+
+          {/* Divider */}
+          {GOOGLE_CLIENT_ID && (
+            <>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                margin: '20px 0', color: '#64748b', fontSize: '13px'
+              }}>
+                <div style={{ flex: 1, height: '1px', background: '#334155' }} />
+                <span>hoặc</span>
+                <div style={{ flex: 1, height: '1px', background: '#334155' }} />
+              </div>
+
+              {/* Google Sign-In Button */}
+              <div
+                ref={googleBtnRef}
+                style={{
+                  display: 'flex', justifyContent: 'center',
+                  minHeight: '44px'
+                }}
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -410,6 +836,9 @@ function Login() {
           </form>
         </div>
       )}
+
+      {/* Forgot Password Modal */}
+      {renderForgotPassword()}
     </div>
   );
 }

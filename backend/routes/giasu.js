@@ -1,13 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3');
 
 function pool(req) { return req.app.locals.pool; }
 function auth(req) { return req.session.user; }
 
-function saveBase64Image(base64Str, prefix) {
+/**
+ * Upload ảnh base64 → S3 (hoặc local fallback nếu chưa cấu hình AWS)
+ */
+async function saveBase64Image(base64Str, prefix) {
   if (!base64Str || typeof base64Str !== 'string') return null;
+
+  // Nếu có cấu hình AWS → upload lên S3
+  if (process.env.AWS_S3_BUCKET) {
+    return await uploadToS3(base64Str, prefix);
+  }
+
+  // Fallback: lưu local (giữ tương thích khi chưa cấu hình S3)
+  const fs = require('fs');
+  const path = require('path');
   const match = base64Str.match(/^data:image\/(\w+);base64,(.+)$/);
   if (!match) return null;
   
@@ -26,17 +37,29 @@ function saveBase64Image(base64Str, prefix) {
   return `/uploads/${filename}`;
 }
 
-function deleteOldImage(oldPath) {
-  if (!oldPath || !oldPath.startsWith('/uploads/')) return;
-  const filePath = path.join(__dirname, '..', oldPath);
-  if (fs.existsSync(filePath)) {
-    try {
-      fs.unlinkSync(filePath);
-    } catch(e) {
-      console.error('Lỗi khi xóa ảnh cũ:', e);
+/**
+ * Xóa ảnh cũ (S3 hoặc local)
+ */
+async function deleteOldImage(oldPath) {
+  if (!oldPath) return;
+
+  // Ảnh trên S3
+  if (oldPath.includes('.s3.')) {
+    await deleteFromS3(oldPath);
+    return;
+  }
+
+  // Ảnh local
+  if (oldPath.startsWith('/uploads/')) {
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '..', oldPath);
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch(e) { console.error('Lỗi khi xóa ảnh cũ:', e); }
     }
   }
 }
+
 
 // Đăng ký tài khoản Gia Sư mới
 router.post('/register', async (req, res) => {
@@ -83,10 +106,10 @@ router.post('/register', async (req, res) => {
       );
       const matk = tkResult.rows[0].matk;
 
-      const anhcccdPath = saveBase64Image(anhcccd, 'cccd');
-      const anhbangcapPath = saveBase64Image(anhbangcap, 'bangcap');
-      const anhthesinhvienPath = saveBase64Image(anhthesinhvien, 'thesv');
-      let anhdaidienPath = saveBase64Image(anhdaidien, 'avatar');
+      const anhcccdPath = await saveBase64Image(anhcccd, 'cccd');
+      const anhbangcapPath = await saveBase64Image(anhbangcap, 'bangcap');
+      const anhthesinhvienPath = await saveBase64Image(anhthesinhvien, 'thesv');
+      let anhdaidienPath = await saveBase64Image(anhdaidien, 'avatar');
 
       const gsResult = await client.query(
         `INSERT INTO giasu (matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien) 
@@ -366,16 +389,16 @@ router.post('/me/update', async (req, res) => {
     let diplomaPath = gsR.rows[0].anhbangcap;
     
     if (anhdaidien && typeof anhdaidien === 'string' && anhdaidien.startsWith('data:image')) {
-      const newAvatarPath = saveBase64Image(anhdaidien, 'avatar');
+      const newAvatarPath = await saveBase64Image(anhdaidien, 'avatar');
       if (newAvatarPath) {
-        deleteOldImage(avatarPath);
+        await deleteOldImage(avatarPath);
         avatarPath = newAvatarPath;
       }
     }
     if (anhbangcap && typeof anhbangcap === 'string' && anhbangcap.startsWith('data:image')) {
-      const newDiplomaPath = saveBase64Image(anhbangcap, 'bangcap');
+      const newDiplomaPath = await saveBase64Image(anhbangcap, 'bangcap');
       if (newDiplomaPath) {
-        deleteOldImage(diplomaPath);
+        await deleteOldImage(diplomaPath);
         diplomaPath = newDiplomaPath;
       }
     }

@@ -4,6 +4,7 @@
 -- ============================================================
 
 -- Xóa bảng nếu đã tồn tại (đúng thứ tự FK)
+DROP TABLE IF EXISTS OTP_RESET CASCADE;
 DROP TABLE IF EXISTS DANHGIA CASCADE;
 DROP TABLE IF EXISTS YEUCAUDOIGIASU CASCADE;
 DROP TABLE IF EXISTS HOAHONG CASCADE;
@@ -36,17 +37,31 @@ INSERT INTO THAMSO (MaTS, TenTS, GiaTri) VALUES ('TyLeHHMacDinh', 'Tỷ lệ hoa
 -- ============================================================
 CREATE TABLE TAIKHOAN (
   MaTK          SERIAL PRIMARY KEY,
-  TenDangNhap   VARCHAR(15)  NOT NULL UNIQUE,
-  MatKhau       VARCHAR(255) NOT NULL,
+  TenDangNhap   VARCHAR(50)  NOT NULL UNIQUE,
+  MatKhau       VARCHAR(255),
   VaiTro        VARCHAR(10)  NOT NULL CHECK (VaiTro IN ('KH','HV','GS','NVQL','BGD','SA')),
   TrangThai     VARCHAR(15)  NOT NULL DEFAULT 'HoatDong' CHECK (TrangThai IN ('HoatDong','Khoa','XoaTam')),
   Email         VARCHAR(100) UNIQUE,
+  AuthProvider  VARCHAR(10)  NOT NULL DEFAULT 'local',
   NgayTao       TIMESTAMP    NOT NULL DEFAULT NOW(),
   NgayCapNhat   TIMESTAMP,
   MaTK_SA       INT REFERENCES TAIKHOAN(MaTK) ON DELETE SET NULL
 );
 CREATE UNIQUE INDEX idx_tk_tendangnhap ON TAIKHOAN(TenDangNhap);
 CREATE UNIQUE INDEX idx_tk_email ON TAIKHOAN(Email) WHERE Email IS NOT NULL;
+
+-- Bảng OTP cho quên mật khẩu
+CREATE TABLE OTP_RESET (
+  MaOTP       SERIAL PRIMARY KEY,
+  MaTK        INT NOT NULL REFERENCES TAIKHOAN(MaTK) ON DELETE CASCADE,
+  OTPHash     VARCHAR(255) NOT NULL,
+  HetHan      TIMESTAMP NOT NULL,
+  SoLanThu    SMALLINT NOT NULL DEFAULT 0,
+  DaSuDung    BOOLEAN NOT NULL DEFAULT FALSE,
+  ResetToken  VARCHAR(255),
+  NgayTao     TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_otp_matk ON OTP_RESET(MaTK);
 
 CREATE TABLE HOCVIEN (
   MaHV        SERIAL PRIMARY KEY,
@@ -147,7 +162,7 @@ CREATE TABLE YEUCAUHOCKEM (
   HinhThucHoc       VARCHAR(30),
   YC_GioiTinhGS     VARCHAR(50),
   YC_TrinhDoGS      VARCHAR(100),
-  SoNgayHoc         INT            NOT NULL DEFAULT 20 CHECK (SoNgayHoc > 0),
+  SoNgayHoc         INT            NOT NULL DEFAULT 0 CHECK (SoNgayHoc >= 0),
   LichHocTrongTuan  VARCHAR(500)   NOT NULL DEFAULT '[]',
   DiaChi            VARCHAR(255),
   GhiChu            VARCHAR(500),
