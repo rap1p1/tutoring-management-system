@@ -79,11 +79,56 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if (result.rows.length === 0) return res.json({ success: false, message: 'Sai tên đăng nhập hoặc mật khẩu' });
     const tk = result.rows[0];
     if (tk.trangthai === 'Khoa') return res.json({ success: false, message: 'Tài khoản đã bị khóa' });
+    // Tài khoản Google không có mật khẩu → không cho login bằng form thường
+    if (!tk.matkhau) return res.json({ success: false, message: 'Tài khoản này sử dụng đăng nhập Google. Vui lòng nhấn nút "Đăng nhập bằng Google".' });
     const ok = await bcrypt.compare(password, tk.matkhau);
     if (!ok) return res.json({ success: false, message: 'Sai tên đăng nhập hoặc mật khẩu' });
+
+    // Kiểm tra 2FA
+    if (tk.is2faenabled) {
+      if (!tk.email) return res.json({ success: false, message: 'Tài khoản chưa có email để nhận OTP 2FA' });
+
+      // Sinh OTP và TempToken
+      const crypto = require('crypto');
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpHash = await bcrypt.hash(otp, 10);
+      const tempToken = crypto.randomUUID();
+
+      await pool.query(
+        `INSERT INTO otp_2fa (matk, otphash, temptoken, hethan) 
+         VALUES ($1, $2, $3, NOW() + INTERVAL '5 minutes')`,
+        [tk.matk, otpHash, tempToken]
+      );
+
+      // Gửi email OTP
+      const { sendEmail } = require('./utils/mailer');
+      sendEmail({
+        to: tk.email,
+        subject: '🔐 Mã OTP Đăng Nhập (2FA) — GiaSưConnect',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+            <h2>Mã xác thực đăng nhập</h2>
+            <p>Mã OTP của bạn là: <strong style="font-size: 24px;">${otp}</strong></p>
+            <p>Mã này có hiệu lực trong 5 phút.</p>
+          </div>
+        `
+      }).catch(err => console.error('Failed to send 2FA OTP:', err));
+
+      return res.json({
+        success: true,
+        require2FA: true,
+        tempToken,
+        email: tk.email,
+        message: 'Mã xác thực 2 lớp đã được gửi đến email của bạn.'
+      });
+    }
+
+    // Đăng nhập bình thường
     req.session.user = { matk: tk.matk, tendangnhap: tk.tendangnhap, vaitro: tk.vaitro };
-    res.json({ success: true, data: { matk: tk.matk, tendangnhap: tk.tendangnhap, vaitro: tk.vaitro } });
-  } catch (e) { console.error(e); res.json({ success: false, message: 'Lỗi server' }); }
+    res.json({ success: true, data: { vaitro: tk.vaitro } });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
 });
 
 app.post('/api/auth/register', registerLimiter, async (req, res) => {
@@ -158,6 +203,7 @@ app.use('/api/hocvien',   require('./routes/hocvien'));
 app.use('/api/giasu',     require('./routes/giasu'));
 app.use('/api/lop',       require('./routes/lop'));
 app.use('/api/nhanvien',  require('./routes/nhanvien'));
+app.use('/api/auth',      require('./routes/auth'));
 
 // ============================================================
 // SEED DATA (tạo tài khoản mặc định)

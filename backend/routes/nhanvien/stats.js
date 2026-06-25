@@ -6,7 +6,12 @@ module.exports = function(pool, auth) {
   // Lấy thông tin cá nhân của nhân viên
   router.get('/me', async (req, res) => {
     try {
-      const r = await pool(req).query('SELECT * FROM nhanvien WHERE matk = $1', [auth(req).matk]);
+      const r = await pool(req).query(`
+        SELECT n.*, t.is2faenabled 
+        FROM nhanvien n
+        JOIN taikhoan t ON n.matk = t.matk
+        WHERE n.matk = $1
+      `, [auth(req).matk]);
       if (!r.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ nhân viên' });
       res.json({ success: true, data: r.rows[0] });
     } catch (e) { res.json({ success: false, message: e.message }); }

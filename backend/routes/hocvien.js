@@ -8,9 +8,47 @@ function auth(req) { return req.session.user; }
 router.get('/me', async (req, res) => {
   if (!auth(req)) return res.json({ success: false, message: 'Chưa đăng nhập' });
   try {
-    const r = await pool(req).query('SELECT * FROM hocvien WHERE matk=$1', [auth(req).matk]);
+    const r = await pool(req).query(`
+      SELECT h.*, t.is2faenabled 
+      FROM hocvien h 
+      JOIN taikhoan t ON h.matk = t.matk 
+      WHERE h.matk=$1
+    `, [auth(req).matk]);
     res.json({ success: true, data: r.rows[0] });
   } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Cập nhật thông tin hồ sơ học viên
+router.put('/me', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'HV') return res.json({ success: false, message: 'Không có quyền' });
+  try {
+    const { hoten, ngaysinh, sdt, diachi } = req.body;
+    
+    if (!hoten || !sdt) {
+      return res.json({ success: false, message: 'Họ tên và Số điện thoại là bắt buộc' });
+    }
+
+    if (!/^\d{10,11}$/.test(sdt)) {
+      return res.json({ success: false, message: 'Số điện thoại phải gồm 10-11 chữ số' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (ngaysinh && ngaysinh >= today) {
+      return res.json({ success: false, message: 'Ngày sinh phải nhỏ hơn ngày hiện tại' });
+    }
+
+    await pool(req).query(
+      `UPDATE hocvien 
+       SET hoten = $1, ngaysinh = $2, sdt = $3, diachi = $4 
+       WHERE matk = $5`,
+      [hoten, ngaysinh || null, sdt, diachi || null, auth(req).matk]
+    );
+
+    res.json({ success: true, message: 'Cập nhật hồ sơ thành công' });
+  } catch (e) { 
+    console.error('Update profile error:', e);
+    res.json({ success: false, message: e.message }); 
+  }
 });
 
 // Gửi yêu cầu học kèm (ĐƠN GIẢN HÓA: SoNgayHoc + LichHocTrongTuan)

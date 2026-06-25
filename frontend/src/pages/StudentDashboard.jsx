@@ -18,6 +18,7 @@ function StudentDashboard() {
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [classSessions, setClassSessions] = useState([]);
@@ -103,6 +104,71 @@ function StudentDashboard() {
     return result;
   };
 
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      setModalMsg({ text: '', type: '' });
+      const res = await fetch('/api/hocvien/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await res.json();
+      if (json.success) {
+        setModalMsg({ text: 'Cập nhật hồ sơ thành công!', type: 'success' });
+        fetchData();
+        setTimeout(() => {
+          setShowProfileModal(false);
+          setModalMsg({ text: '', type: '' });
+        }, 1500);
+      } else {
+        setModalMsg({ text: json.message, type: 'error' });
+      }
+    } catch (e) {
+      setModalMsg({ text: 'Lỗi kết nối', type: 'error' });
+    }
+  };
+
+  const handleToggle2FA = async () => {
+    const newStatus = !profile.is2faenabled;
+    const confirmMsg = newStatus 
+      ? 'Bạn có chắc chắn muốn BẬT xác thực 2 lớp? Mã OTP sẽ được gửi về email của bạn mỗi khi đăng nhập.'
+      : 'Bạn có chắc chắn muốn TẮT xác thực 2 lớp? Tài khoản của bạn sẽ giảm đi một lớp bảo vệ.';
+    
+    const result = await Swal.fire({
+      title: 'Xác nhận',
+      text: confirmMsg,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await fetch('/api/auth/toggle-2fa', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newStatus })
+      });
+      const json = await res.json();
+      if (json.success) {
+        Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        fetchData();
+      } else {
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    } catch (e) {
+      Swal.fire({ title: 'Lỗi kết nối', text: 'Không thể kết nối đến máy chủ', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
+  };
+
   const handleAddRequest = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -125,7 +191,7 @@ function StudentDashboard() {
           hinhthuchoc: data.hinhthuc,
           yc_gioitinhgs: data.gioitinh,
           yc_trinhdogs: data.trinhdo,
-          songayhoc: 20,
+          songayhoc: 0,
           lichhoctrongtuan: JSON.stringify(lichHoc),
           diachi: data.diachi,
           ghichu: data.ghichu
@@ -363,16 +429,30 @@ function StudentDashboard() {
     }
   };
 
-  const handlePayTuition = async (mahp) => {
+  const handlePayTuition = async (tuition) => {
+    const bankId = '970422'; // MB Bank (for example)
+    const accountNo = '0123456789';
+    const accountName = 'TRUNG TAM GIA SU';
+    const addInfo = `NOPHP ${tuition.mahp}`;
+    const amount = tuition.tonghocphi;
+    const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${accountName}`;
+
     const result = await Swal.fire({
-      title: 'Nộp học phí',
-      text: 'Bạn xác nhận muốn nộp học phí cho hóa đơn này?',
-      icon: 'question',
+      title: 'Thanh toán học phí qua QR',
+      html: `
+        <div style="text-align: center; margin-bottom: 15px;">
+          <p style="margin-bottom: 15px; color: #94a3b8; font-size: 14px;">Quét mã QR dưới đây bằng ứng dụng ngân hàng để thanh toán.</p>
+          <img src="${qrUrl}" alt="QR Code" style="max-width: 100%; border-radius: 8px; border: 2px solid rgba(255,255,255,0.1);" />
+          <p style="margin-top: 15px; font-weight: bold; color: #14b8a6; font-size: 18px;">Số tiền: ${new Intl.NumberFormat('vi-VN').format(amount)} VNĐ</p>
+          <p style="margin-top: 5px; color: #f43f5e; font-size: 13px;">Nội dung CK: <strong style="color: #fff;">${addInfo}</strong></p>
+          <p style="margin-top: 10px; font-size: 13px; color: #94a3b8;">Sau khi chuyển khoản thành công, vui lòng nhấn nút "Đã thanh toán" bên dưới.</p>
+        </div>
+      `,
       showCancelButton: true,
       confirmButtonColor: '#14b8a6',
       cancelButtonColor: '#64748b',
-      confirmButtonText: 'Xác nhận nộp',
-      cancelButtonText: 'Hủy',
+      confirmButtonText: 'Đã thanh toán',
+      cancelButtonText: 'Đóng',
       background: '#1e293b',
       color: '#fff'
     });
@@ -380,7 +460,7 @@ function StudentDashboard() {
     if (!result.isConfirmed) return;
 
     try {
-      const res = await fetch(`/api/hocvien/hocphi/${mahp}/nop`, {
+      const res = await fetch(`/api/hocvien/hocphi/${tuition.mahp}/nop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -456,13 +536,27 @@ function StudentDashboard() {
       <div className="dashboard-grid">
         <div className="grid-col-8">
           <div className="glass-card mb-4">
-            <h3>Hồ Sơ Cá Nhân</h3>
+            <div className="card-header justify-between">
+              <h3>Hồ Sơ Cá Nhân</h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
+                  onClick={handleToggle2FA}
+                >
+                  {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={() => setShowProfileModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  Cập nhật hồ sơ
+                </button>
+              </div>
+            </div>
             <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Mã Học Viên (ID)</strong> {profile.mahv ? 'HV' + profile.mahv.toString().padStart(6, '0') : ''}</div>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Họ và tên</strong> {profile.hoten}</div>
-              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Ngày sinh</strong> {new Date(profile.ngaysinh).toLocaleDateString('vi-VN')}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Ngày sinh</strong> {profile.ngaysinh ? new Date(profile.ngaysinh).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}</div>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Số điện thoại</strong> {profile.sdt}</div>
               <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Email</strong> {profile.email || 'Không có'}</div>
+              <div><strong style={{ color: '#94a3b8', display: 'block', fontSize: '12px' }}>Địa chỉ</strong> {profile.diachi || 'Chưa cập nhật'}</div>
             </div>
           </div>
 
@@ -588,7 +682,7 @@ function StudentDashboard() {
                       {t.trangthai === 'ChuaNop' && (
                         <button
                           className="btn btn-xs btn-teal"
-                          onClick={() => handlePayTuition(t.mahp)}
+                          onClick={() => handlePayTuition(t)}
                           style={{ padding: '2px 8px', fontSize: '11px' }}
                         >
                           Nộp học phí
@@ -602,6 +696,49 @@ function StudentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Profile Update Modal */}
+      {showProfileModal && (
+        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Cập Nhật Hồ Sơ Cá Nhân</h3>
+              <span className="close-btn" onClick={() => { setShowProfileModal(false); setModalMsg({ text: '', type: '' }); }}>&times;</span>
+            </div>
+
+            {modalMsg.text && (
+              <div style={{
+                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
+                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
+                padding: '10px', borderRadius: '6px', marginBottom: '15px'
+              }}>
+                {modalMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProfile}>
+              <div className="form-group">
+                <label>Họ và tên *</label>
+                <input type="text" name="hoten" defaultValue={profile.hoten} required />
+              </div>
+              <div className="form-group">
+                <label>Số điện thoại *</label>
+                <input type="tel" name="sdt" defaultValue={profile.sdt !== 'Chưa cập nhật' ? profile.sdt : ''} required placeholder="Ví dụ: 0987654321" />
+              </div>
+              <div className="form-group">
+                <label>Ngày sinh</label>
+                <input type="date" name="ngaysinh" defaultValue={profile.ngaysinh ? profile.ngaysinh.split('T')[0] : ''} />
+              </div>
+              <div className="form-group">
+                <label>Địa chỉ</label>
+                <input type="text" name="diachi" defaultValue={profile.diachi || ''} placeholder="Quận/Huyện, TP..." />
+              </div>
+              <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '15px' }}>Lưu Thay Đổi</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Request Modal - ĐƠN GIẢN HÓA */}
       {showRequestModal && (

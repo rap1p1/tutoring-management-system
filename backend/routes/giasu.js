@@ -1,13 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3');
 
 function pool(req) { return req.app.locals.pool; }
 function auth(req) { return req.session.user; }
 
-function saveBase64Image(base64Str, prefix) {
+/**
+ * Upload ảnh base64 → S3 (hoặc local fallback nếu chưa cấu hình AWS)
+ */
+async function saveBase64Image(base64Str, prefix, username = '') {
   if (!base64Str || typeof base64Str !== 'string') return null;
+
+  // Nếu có cấu hình AWS → upload lên S3
+  if (process.env.AWS_S3_BUCKET) {
+    return await uploadToS3(base64Str, prefix, username);
+  }
+
+  // Fallback: lưu local (giữ tương thích khi chưa cấu hình S3)
+  const fs = require('fs');
+  const path = require('path');
   const match = base64Str.match(/^data:image\/(\w+);base64,(.+)$/);
   if (!match) return null;
   
@@ -15,7 +26,8 @@ function saveBase64Image(base64Str, prefix) {
   const data = match[2];
   const buffer = Buffer.from(data, 'base64');
   
-  const filename = `${prefix}_${Date.now()}_${Math.round(Math.random() * 1e9)}.${ext}`;
+  const safeUsername = username ? username.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '_' : '';
+  const filename = `${safeUsername}${prefix}_${Date.now()}.${ext}`;
   const dirPath = path.join(__dirname, '../uploads');
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
@@ -26,17 +38,29 @@ function saveBase64Image(base64Str, prefix) {
   return `/uploads/${filename}`;
 }
 
-function deleteOldImage(oldPath) {
-  if (!oldPath || !oldPath.startsWith('/uploads/')) return;
-  const filePath = path.join(__dirname, '..', oldPath);
-  if (fs.existsSync(filePath)) {
-    try {
-      fs.unlinkSync(filePath);
-    } catch(e) {
-      console.error('Lỗi khi xóa ảnh cũ:', e);
+/**
+ * Xóa ảnh cũ (S3 hoặc local)
+ */
+async function deleteOldImage(oldPath) {
+  if (!oldPath) return;
+
+  // Ảnh trên S3
+  if (oldPath.includes('.s3.')) {
+    await deleteFromS3(oldPath);
+    return;
+  }
+
+  // Ảnh local
+  if (oldPath.startsWith('/uploads/')) {
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '..', oldPath);
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch(e) { console.error('Lỗi khi xóa ảnh cũ:', e); }
     }
   }
 }
+
 
 // Đăng ký tài khoản Gia Sư mới
 router.post('/register', async (req, res) => {
@@ -83,10 +107,10 @@ router.post('/register', async (req, res) => {
       );
       const matk = tkResult.rows[0].matk;
 
-      const anhcccdPath = saveBase64Image(anhcccd, 'cccd');
-      const anhbangcapPath = saveBase64Image(anhbangcap, 'bangcap');
-      const anhthesinhvienPath = saveBase64Image(anhthesinhvien, 'thesv');
-      let anhdaidienPath = saveBase64Image(anhdaidien, 'avatar');
+      const anhcccdPath = await saveBase64Image(anhcccd, 'cccd', username);
+      const anhbangcapPath = await saveBase64Image(anhbangcap, 'bangcap', username);
+      const anhthesinhvienPath = await saveBase64Image(anhthesinhvien, 'thesv', username);
+      let anhdaidienPath = await saveBase64Image(anhdaidien, 'avatar', username);
 
       const gsResult = await client.query(
         `INSERT INTO giasu (matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien) 
@@ -115,13 +139,18 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Lấy thông tin cá nhân của gia sư
+// Lấy thông tin hồ sơ của chính gia sư đang đăng nhập
 router.get('/me', async (req, res) => {
-  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  if (!auth(req)) return res.json({ success: false, message: 'Chưa đăng nhập' });
   try {
-    const r = await pool(req).query('SELECT * FROM giasu WHERE matk = $1', [auth(req).matk]);
-    if (!r.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ gia sư' });
-    res.json({ success: true, data: r.rows[0] });
+    const gsR = await pool(req).query(`
+      SELECT g.*, t.is2faenabled 
+      FROM giasu g
+      JOIN taikhoan t ON g.matk = t.matk
+      WHERE g.matk=$1
+    `, [auth(req).matk]);
+    if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ' });
+    res.json({ success: true, data: gsR.rows[0] });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
@@ -364,18 +393,19 @@ router.post('/me/update', async (req, res) => {
     
     let avatarPath = gsR.rows[0].anhdaidien;
     let diplomaPath = gsR.rows[0].anhbangcap;
+    const username = auth(req).tendangnhap;
     
     if (anhdaidien && typeof anhdaidien === 'string' && anhdaidien.startsWith('data:image')) {
-      const newAvatarPath = saveBase64Image(anhdaidien, 'avatar');
+      const newAvatarPath = await saveBase64Image(anhdaidien, 'avatar', username);
       if (newAvatarPath) {
-        deleteOldImage(avatarPath);
+        await deleteOldImage(avatarPath);
         avatarPath = newAvatarPath;
       }
     }
     if (anhbangcap && typeof anhbangcap === 'string' && anhbangcap.startsWith('data:image')) {
-      const newDiplomaPath = saveBase64Image(anhbangcap, 'bangcap');
+      const newDiplomaPath = await saveBase64Image(anhbangcap, 'bangcap', username);
       if (newDiplomaPath) {
-        deleteOldImage(diplomaPath);
+        await deleteOldImage(diplomaPath);
         diplomaPath = newDiplomaPath;
       }
     }

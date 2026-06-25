@@ -1,97 +1,133 @@
 import React from 'react';
-import { Download, PlusCircle, Settings, Key, HelpCircle, FileText, CheckCircle, XCircle, Check, X, Search, Filter } from 'lucide-react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
+import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusCircle, CreditCard, Download, Users, GraduationCap, MessageSquare, Shield, Settings } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import * as XLSX from "xlsx";
 
 export default function AllStudentsTab(props) {
+  const { propsObj } = props;
   const {
-    activeTab, setActiveTab, pendingTutors, allTutors, allStudents, requests, classes, 
-    tuitions, commissions, supportReqs, accounts, settings,
-    currentUser, handleApproveTutor, handleOpenClassModal,
-    handleOpenClassDetail, handleEndClass, exportClasses,
-    setShowCreateInvoiceModal, setShowCreateCommissionModal,
-    exportFinances, handleConfirmTuition, handleConfirmCommission,
-    handleApproveSupport, handleApproveLeave, handleToggleLockAcc,
-    handleSaveConfig, formatLichHoc, newConfig, setNewConfig,
-    defaultTyleHH, setDefaultTyleHH, defaultHocPhis, setDefaultHocPhis, showMsg
-  } = props;
+    activeTab,
+    setActiveTab,
+    globalError,
+    setGlobalError,
+    globalSuccess,
+    setGlobalSuccess,
+    loading,
+    setLoading,
+    filterText,
+    setFilterText,
+    currentPage,
+    setCurrentPage,
+    profileModal,
+    setProfileModal,
+    loadingProfile,
+    setLoadingProfile,
+    stats,
+    setStats,
+    pendingTutors,
+    setPendingTutors,
+    requests,
+    setRequests,
+    classes,
+    setClasses,
+    tuitions,
+    setTuitions,
+    commissions,
+    setCommissions,
+    supportRequests,
+    setSupportRequests,
+    absences,
+    setAbsences,
+    revenueData,
+    setRevenueData,
+    accounts,
+    setAccounts,
+    profile,
+    setProfile,
+    currentUser,
+    setCurrentUser,
+    defaultTyleHH,
+    setDefaultTyleHH,
+    defaultHocPhis,
+    setDefaultHocPhis,
+    allTutors,
+    setAllTutors,
+    allStudents,
+    setAllStudents,
+    showClassDetailModal,
+    setShowClassDetailModal,
+    classDetail,
+    setClassDetail,
+    loadingDetail,
+    setLoadingDetail,
+    showClassModal,
+    setShowClassModal,
+    showCreateClassModal,
+    setShowCreateClassModal,
+    showCreateInvoiceModal,
+    setShowCreateInvoiceModal,
+    showCreateCommissionModal,
+    setShowCreateCommissionModal,
+    selectedRequest,
+    setSelectedRequest,
+    handleTabChange,
+    fetchData,
+    handleApproveTutor,
+    handleOpenClassModal,
+    formatLichHoc,
+    handleCreateClass,
+    handleConfirmTuition,
+    handleConfirmCommission,
+    handleResolveSupport,
+    handleDuyetNghi,
+    handleEndClass,
+    handleToggleLock,
+    handleToggle2FA,
+    handleOpenClassDetail,
+    handleChangeCommission,
+    exportToExcel,
+    exportClasses,
+    exportData,
+    exportFinances
+  } = propsObj;
 
   return (
     <>
-      <div className="table-responsive">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Học viên</th>
-                    <th>SĐT / Email</th>
-                    <th>Địa chỉ</th>
-                    <th>Các lớp đang học</th>
-                    <th>Hành động</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allStudents.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: "center" }}>Không có học viên nào</td>
-                    </tr>
-                  ) : (
-                    allStudents.map((hv) => {
-                      let classesList = [];
-                      try {
-                        classesList = typeof hv.lophoc === 'string' ? JSON.parse(hv.lophoc) : hv.lophoc;
-                      } catch(e) {}
-                      if (!Array.isArray(classesList)) classesList = [];
-
-                      return (
-                      <tr key={hv.mahv}>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            {hv.anhdaidien ? (
-                              <img src={hv.anhdaidien} alt="avatar" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover", border: "1px solid var(--color-primary)" }} />
-                            ) : (
-                              <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: "#94a3b8" }}>N/A</div>
-                            )}
-                            <div>
-                              <strong>{hv.hoten}</strong>
-                              <br />
-                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-                                {hv.gioitinh} - {new Date(hv.ngaysinh).toLocaleDateString("vi-VN")}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          {hv.sdt}
-                          <br />
-                          <span style={{ fontSize: "12px", color: "#94a3b8" }}>{hv.email}</span>
-                        </td>
-                        <td>{hv.diachi}</td>
-                        <td>
-                          {classesList.length === 0 ? (
-                            <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Chưa có lớp</span>
-                          ) : (
-                            <ul style={{ margin: 0, paddingLeft: '15px', fontSize: '13px' }}>
-                              {classesList.map(c => (
-                                <li key={c.malop}>
-                                  Lớp {c.malop} ({c.tenmh}): 
-                                  <span style={{ color: c.trangthai === 'DangDay' ? 'var(--color-success)' : 'var(--color-warning)', marginLeft: '5px' }}>
-                                    {c.trangthai}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </td>
-                        <td>
-                          <button className="btn btn-xs btn-secondary" onClick={() => alert("Chức năng xem chi tiết đang được phát triển.")}>
-                            Chi tiết
-                          </button>
-                        </td>
-                      </tr>
-                    )})
-                  )}
-                </tbody>
-              </table>
-            </div>
+      {
+        () => {
+            const filteredData = allStudents.filter(s =>
+              (s.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (s.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (s.email || '').toLowerCase().includes(filterText.toLowerCase())
+            );
+            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+            return (
+              <div className="table-responsive">
+                {renderSearchBox("Tìm theo tên, SĐT, email...")}
+                <table className="table">
+                  <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Email</th><th>Địa chỉ</th><th>Cấp học</th><th></th></tr></thead>
+                  <tbody>
+                    {paginatedData.length === 0 ? (
+                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Không có dữ liệu</td></tr>
+                    ) : (
+                      paginatedData.map(s => (
+                        <tr key={s.mahv}>
+                          <td><strong>{s.hoten}</strong></td>
+                          <td>{s.sdt}</td>
+                          <td>{s.email || 'Chưa có'}</td>
+                          <td>{s.diachi || 'Chưa có'}</td>
+                          <td>{s.caphoc || 'Chưa có'}</td>
+                          <td><button className="btn btn-xs btn-teal" onClick={() => openProfileModal('student', s.mahv)}>Chi tiết</button></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPagination(filteredData.length)}
+              </div>
+            );
+          }
+      }
     </>
   );
 }
