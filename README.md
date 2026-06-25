@@ -102,7 +102,7 @@ Gia_Su/
    ```bash
    npm run dev
    ```
-   *(Server sẽ chạy tại cổng http://localhost:5000)*
+   *(Server sẽ chạy tại cổng http://localhost:3000)*
 
 ### 4. Cài đặt và khởi chạy Frontend
 1. Mở một cửa sổ Terminal mới, di chuyển vào thư mục frontend:
