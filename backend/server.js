@@ -42,6 +42,37 @@ function requireRole(...roles) {
   };
 }
 
+// Admin Logger Middleware
+async function adminLogger(req, res, next) {
+  res.on('finish', async () => {
+    if (req.session && req.session.user) {
+      if (req.path === '/nhanvien/logs') return; // Tránh loop log
+      if (req.method === 'GET') return; // Bỏ qua các thao tác chỉ xem dữ liệu (GET)
+      
+      const matk = req.session.user.matk;
+      const endpoint = req.originalUrl;
+      const method = req.method;
+      const ip = req.ip || req.connection.remoteAddress;
+      const hanhdong = method + ' ' + req.path;
+      const chitiet = { body: { ...req.body }, query: req.query, status: res.statusCode };
+      
+      // Mask passwords
+      if (chitiet.body.matkhau) chitiet.body.matkhau = '***';
+      if (chitiet.body.password) chitiet.body.password = '***';
+
+      try {
+        await pool.query(
+          "INSERT INTO LOG_TRUY_CAP (MaTK, Endpoint, Method, HanhDong, ChiTiet, IPAddress) VALUES ($1, $2, $3, $4, $5, $6)",
+          [matk, endpoint, method, hanhdong, JSON.stringify(chitiet), ip]
+        );
+      } catch (err) { console.error("Lỗi ghi log:", err); }
+    }
+  });
+  next();
+}
+
+app.use('/api', adminLogger);
+
 // ============================================================
 // AUTH ROUTES
 // ============================================================

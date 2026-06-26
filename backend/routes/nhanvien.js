@@ -36,6 +36,81 @@ router.get('/me', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
+// Lấy danh sách log truy cập
+router.get('/logs', async (req, res) => {
+  if (auth(req).vaitro !== 'BGD' && auth(req).vaitro !== 'SA') {
+    return res.json({ success: false, message: 'Chỉ Giám Đốc mới có quyền xem log truy cập' });
+  }
+  try {
+    let { page = 1, limit = 20, keyword, fromDate, toDate } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+    const offset = (page - 1) * limit;
+
+    let whereClauses = [];
+    let values = [];
+    let paramIdx = 1;
+
+    if (keyword) {
+      whereClauses.push(`(
+        t.TenDangNhap ILIKE $${paramIdx} OR 
+        n.HoTen ILIKE $${paramIdx} OR 
+        gs.HoTen ILIKE $${paramIdx} OR 
+        hv.HoTen ILIKE $${paramIdx} OR 
+        l.HanhDong ILIKE $${paramIdx} OR
+        l.MaTK::text = $${paramIdx}
+      )`);
+      values.push(`%${keyword}%`);
+      paramIdx++;
+    }
+    if (fromDate) {
+      whereClauses.push(`l.ThoiGian >= $${paramIdx++}`);
+      values.push(fromDate);
+    }
+    if (toDate) {
+      whereClauses.push(`l.ThoiGian <= $${paramIdx++}::timestamp + interval '1 day'`);
+      values.push(toDate);
+    }
+
+    const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    const fromStr = `
+      FROM LOG_TRUY_CAP l
+      JOIN TAIKHOAN t ON l.MaTK = t.MaTK
+      LEFT JOIN NHANVIEN n ON t.MaTK = n.MaTK
+      LEFT JOIN GIASU gs ON t.MaTK = gs.MaTK
+      LEFT JOIN HOCVIEN hv ON t.MaTK = hv.MaTK
+    `;
+
+    const countRes = await pool(req).query(`SELECT COUNT(*) ${fromStr} ${whereStr}`, values);
+    const total = parseInt(countRes.rows[0].count);
+
+    values.push(limit, offset);
+    const queryStr = `
+      SELECT l.*, 
+             t.TenDangNhap, 
+             COALESCE(n.HoTen, gs.HoTen, hv.HoTen) as NguoiThucHien
+      ${fromStr}
+      ${whereStr}
+      ORDER BY l.ThoiGian DESC
+      LIMIT $${paramIdx++} OFFSET $${paramIdx}
+    `;
+    const r = await pool(req).query(queryStr, values);
+    
+    res.json({
+      success: true,
+      data: r.rows,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
+});
+
 // Lấy thông tin thống kê tổng quan
 router.get('/stats', async (req, res) => {
   try {

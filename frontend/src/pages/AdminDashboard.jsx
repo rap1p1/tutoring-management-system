@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusCircle, CreditCard, Download, Users, GraduationCap, MessageSquare, Shield, Settings } from 'lucide-react';
+import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusCircle, CreditCard, Download, Users, GraduationCap, MessageSquare, Shield, Settings, Activity } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -37,7 +37,7 @@ function AdminDashboard() {
   };
 
   // Data states
-  const [stats, setStats] = useState({ activeClasses: 0, pendingTutors: 0, pendingRequests: 0, revenue: 0 });
+  const [stats, setStats] = useState({});
   const [pendingTutors, setPendingTutors] = useState([]);
   const [requests, setRequests] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -49,6 +49,39 @@ function AdminDashboard() {
   const [accounts, setAccounts] = useState([]);
   const [profile, setProfile] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Logs state
+  const [logs, setLogs] = useState([]);
+  const [logPagination, setLogPagination] = useState({ page: 1, totalPages: 1 });
+  const [logFilterKeyword, setLogFilterKeyword] = useState('');
+  const [logFilterFromDate, setLogFilterFromDate] = useState('');
+  const [logFilterToDate, setLogFilterToDate] = useState('');
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  
+  const fetchLogs = async (page = 1) => {
+    setLoadingLogs(true);
+    try {
+      const q = new URLSearchParams({ page, limit: 15 });
+      if (logFilterKeyword) q.append('keyword', logFilterKeyword);
+      if (logFilterFromDate) q.append('fromDate', logFilterFromDate);
+      if (logFilterToDate) q.append('toDate', logFilterToDate);
+      const res = await fetch(`/api/nhanvien/logs?${q.toString()}`).then(r => r.json());
+      if (res.success) {
+        setLogs(res.data);
+        setLogPagination(res.pagination);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoadingLogs(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchLogs(1);
+    }
+  }, [activeTab]);
+
   const [defaultTyleHH, setDefaultTyleHH] = useState(70);
   const [defaultHocPhis, setDefaultHocPhis] = useState({
     HocPhi_Cap1: 100000,
@@ -714,6 +747,13 @@ function AdminDashboard() {
             <div className="stats-info"><span className="stats-label">Cấu Hình Hệ Thống</span><span className="stats-value">Cài đặt</span></div>
           </div>
         )}
+        
+        {currentUser && (currentUser.vaitro === 'BGD' || currentUser.vaitro === 'SA') && (
+          <div className={`stats-card${activeTab === 'logs' ? ' active-card' : ''}`} onClick={() => handleTabChange('logs')} style={{ cursor: 'pointer', border: activeTab === 'logs' ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="stats-icon" style={{ color: '#8b5cf6' }}><Activity size={24} /></div>
+            <div className="stats-info"><span className="stats-label">Lịch Sử Hệ Thống</span><span className="stats-value">Logs</span></div>
+          </div>
+        )}
       </div>
 
       {/* Tab Content */}
@@ -1321,6 +1361,106 @@ function AdminDashboard() {
               >
                 Lưu học phí mặc định
               </button>
+            </div>
+          )}
+
+          {/* LOGS TAB */}
+          {activeTab === 'logs' && currentUser && (currentUser.vaitro === 'BGD' || currentUser.vaitro === 'SA') && (
+            <div>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="Từ khóa (Mã TK, Tên, Hành động...)" 
+                  value={logFilterKeyword} 
+                  onChange={e => setLogFilterKeyword(e.target.value)}
+                  style={{ flex: '1 1 200px' }}
+                />
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={logFilterFromDate} 
+                  onChange={e => setLogFilterFromDate(e.target.value)}
+                  style={{ flex: '0 1 150px' }}
+                />
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={logFilterToDate} 
+                  onChange={e => setLogFilterToDate(e.target.value)}
+                  style={{ flex: '0 1 150px' }}
+                />
+                <button className="btn btn-primary" onClick={() => fetchLogs(1)} style={{ whiteSpace: 'nowrap' }}>Lọc Log</button>
+              </div>
+
+              {loadingLogs ? <div style={{textAlign:'center', padding:'20px'}}>Đang tải log...</div> : (
+                <div className="table-responsive">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>THỜI GIAN</th>
+                        <th>NGƯỜI THỰC HIỆN</th>
+                        <th>HÀNH ĐỘNG / ENDPOINT</th>
+                        <th>CHI TIẾT</th>
+                        <th>IP ADDRESS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map((log) => (
+                        <tr key={log.malog}>
+                          <td>{new Date(log.thoigian).toLocaleString('vi-VN')}</td>
+                          <td>
+                            <strong>{log.tendangnhap}</strong><br/>
+                            <span style={{fontSize:'12px', color:'#94a3b8'}}>{log.nguoithuchien}</span>
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              backgroundColor: log.method === 'GET' ? 'rgba(59,130,246,0.2)' : (log.method === 'POST' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'),
+                              color: log.method === 'GET' ? '#60a5fa' : (log.method === 'POST' ? '#34d399' : '#fbbf24')
+                            }}>{log.method}</span>
+                            <div style={{marginTop: '4px', fontSize: '13px'}}>{log.hanhdong}</div>
+                          </td>
+                          <td>
+                            <details style={{cursor:'pointer', fontSize:'13px', background:'rgba(255,255,255,0.02)', padding:'5px', borderRadius:'4px'}}>
+                              <summary>Xem dữ liệu</summary>
+                              <pre style={{ margin:0, padding:'10px', fontSize:'11px', color:'#a5b4fc', maxHeight:'150px', overflowY:'auto' }}>
+                                {JSON.stringify(log.chitiet, null, 2)}
+                              </pre>
+                            </details>
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: 'monospace', color: '#cbd5e1' }}>
+                              {log.ipaddress === '::1' || log.ipaddress === '127.0.0.1' ? 'Localhost (::1)' : log.ipaddress}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {logs.length === 0 && (
+                        <tr><td colSpan="5" className="text-center">Không tìm thấy log nào</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {logPagination.totalPages > 1 && (
+                <div className="pagination" style={{ marginTop: '15px', display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                  <button 
+                    disabled={logPagination.page === 1} 
+                    onClick={() => fetchLogs(logPagination.page - 1)}
+                    className="btn btn-outline" style={{padding:'5px 10px'}}
+                  >Trang trước</button>
+                  <span style={{padding:'5px 10px'}}>Trang {logPagination.page} / {logPagination.totalPages}</span>
+                  <button 
+                    disabled={logPagination.page === logPagination.totalPages} 
+                    onClick={() => fetchLogs(logPagination.page + 1)}
+                    className="btn btn-outline" style={{padding:'5px 10px'}}
+                  >Trang sau</button>
+                </div>
+              )}
             </div>
           )}
         </div>
