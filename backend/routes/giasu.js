@@ -285,6 +285,56 @@ router.get('/lop', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
+// Gia sư xác nhận nhận lớp
+router.post('/lop/:id/nhan', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  try {
+    const { id } = req.params;
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
+    if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ' });
+    const mags = gsR.rows[0].mags;
+
+    const lopR = await pool(req).query("SELECT trangthai FROM lop WHERE malop = $1 AND mags = $2", [id, mags]);
+    if (!lopR.rows.length) return res.json({ success: false, message: 'Lớp không tồn tại hoặc không thuộc về bạn' });
+    if (lopR.rows[0].trangthai !== 'DaPhanCong') return res.json({ success: false, message: 'Lớp không ở trạng thái chờ xác nhận' });
+
+    await pool(req).query("UPDATE lop SET trangthai = 'DangDay', hanxacnhan = NULL WHERE malop = $1", [id]);
+    res.json({ success: true, message: 'Xác nhận nhận lớp thành công!' });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Gia sư từ chối lớp
+router.post('/lop/:id/tuchoi', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  const client = await pool(req).connect();
+  try {
+    const { id } = req.params;
+    const gsR = await client.query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
+    if (!gsR.rows.length) { client.release(); return res.json({ success: false, message: 'Không tìm thấy hồ sơ' }); }
+    const mags = gsR.rows[0].mags;
+
+    const lopR = await client.query("SELECT trangthai, mayc FROM lop WHERE malop = $1 AND mags = $2", [id, mags]);
+    if (!lopR.rows.length) { client.release(); return res.json({ success: false, message: 'Lớp không tồn tại hoặc không thuộc về bạn' }); }
+    if (lopR.rows[0].trangthai !== 'DaPhanCong') { client.release(); return res.json({ success: false, message: 'Lớp không ở trạng thái chờ xác nhận' }); }
+
+    await client.query('BEGIN');
+    
+    // Xóa hoàn toàn lớp học nháp này để Admin ghép lại từ đầu
+    await client.query("DELETE FROM lop WHERE malop = $1", [id]);
+    
+    // Đẩy yêu cầu học kèm về ChoGhep
+    await client.query("UPDATE yeucauhockem SET trangthai = 'ChoGhep' WHERE mayc = $1", [lopR.rows[0].mayc]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Từ chối lớp thành công, lớp đã được trả về trạng thái chờ ghép.' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.json({ success: false, message: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Lấy danh sách hoa hồng của gia sư
 router.get('/hoahong', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
@@ -342,6 +392,17 @@ router.post('/xinnghibuoi', async (req, res) => {
     
     if (!['Sang', 'Chieu', 'Toi'].includes(cahoc)) {
       return res.json({ success: false, message: 'Ca học không hợp lệ' });
+    }
+    
+    // KIỂM TRA CHẶN XIN NGHỈ SÁT GIỜ (Yêu cầu báo trước 1 ngày)
+    const ngaydayDate = new Date(ngayday);
+    ngaydayDate.setHours(0, 0, 0, 0);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (ngaydayDate <= today) {
+      return res.json({ success: false, message: 'Chỉ có thể xin nghỉ trước ngày học ít nhất 1 ngày. Vui lòng liên hệ trực tiếp Admin nếu có việc gấp!' });
     }
     
     // Kiểm tra xem buổi đó đã tồn tại chưa (trạng thái ChoXacNhan)

@@ -62,14 +62,17 @@ router.post('/google', async (req, res) => {
     }
 
     // Tài khoản chưa tồn tại → tạo mới (role HV)
-    const username = email.split('@')[0] + '_gg';
+    let baseUsername = email.split('@')[0];
+    if (baseUsername.length > 10) baseUsername = baseUsername.substring(0, 10);
+    const username = baseUsername + '_gg';
+    
     // Kiểm tra trùng username
     let finalUsername = username;
     const usernameCheck = await pool(req).query(
       'SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]
     );
     if (usernameCheck.rows.length > 0) {
-      finalUsername = username + '_' + Date.now().toString().slice(-4);
+      finalUsername = baseUsername.substring(0, 6) + '_' + Date.now().toString().slice(-4);
     }
 
     const client = await pool(req).connect();

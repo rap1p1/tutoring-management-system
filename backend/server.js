@@ -110,17 +110,17 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, password, hoten, ngaysinh, sdt, email } = req.body;
     if (!username || !password || !hoten || !ngaysinh || !sdt) return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
-    
+
     if (password.length < 6) return res.json({ success: false, message: 'Mật khẩu phải từ 6 ký tự trở lên' });
     if (!/^\d{10,11}$/.test(sdt)) return res.json({ success: false, message: 'Số điện thoại không hợp lệ' });
     if (email && !email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải có đuôi @gmail.com' });
-    
+
     const today = new Date().toISOString().split('T')[0];
     if (ngaysinh >= today) return res.json({ success: false, message: 'Ngày sinh phải nhỏ hơn ngày hiện tại' });
 
     const exists = await pool.query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (exists.rows.length > 0) return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại' });
-    
+
     const hash = await bcrypt.hash(password, 10);
     const client = await pool.connect();
     try {
@@ -173,12 +173,12 @@ app.locals.bcrypt = bcrypt;
 // ============================================================
 // ROUTES - mount separate files
 // ============================================================
-app.use('/api/monhoc',    require('./routes/monhoc'));
-app.use('/api/hocvien',   require('./routes/hocvien'));
-app.use('/api/giasu',     require('./routes/giasu'));
-app.use('/api/lop',       require('./routes/lop'));
-app.use('/api/nhanvien',  require('./routes/nhanvien'));
-app.use('/api/auth',      require('./routes/auth'));
+app.use('/api/monhoc', require('./routes/monhoc'));
+app.use('/api/hocvien', require('./routes/hocvien'));
+app.use('/api/giasu', require('./routes/giasu'));
+app.use('/api/lop', require('./routes/lop'));
+app.use('/api/nhanvien', require('./routes/nhanvien'));
+app.use('/api/auth', require('./routes/auth'));
 
 // ============================================================
 // SEED DATA (tạo tài khoản mặc định)
@@ -192,25 +192,25 @@ async function seedData() {
     try {
       await client.query('BEGIN');
       // SA
-      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin','"+hash+"','SA') RETURNING matk");
-      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Quản trị viên','0900000001','SA','2024-01-01')",[sa.rows[0].matk]);
+      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin','" + hash + "','SA') RETURNING matk");
+      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Quản trị viên','0900000001','SA','2024-01-01')", [sa.rows[0].matk]);
       // BGD
-      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc','"+hash+"','BGD') RETURNING matk");
-      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Giám đốc','0900000002','Giám đốc','2024-01-01')",[bgd.rows[0].matk]);
+      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc','" + hash + "','BGD') RETURNING matk");
+      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Giám đốc','0900000002','Giám đốc','2024-01-01')", [bgd.rows[0].matk]);
       // NVQL
-      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien','"+hash+"','NVQL') RETURNING matk");
-      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Nhân viên QL','0900000003','NVQL','2024-01-01')",[nv.rows[0].matk]);
+      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien','" + hash + "','NVQL') RETURNING matk");
+      await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Nhân viên QL','0900000003','NVQL','2024-01-01')", [nv.rows[0].matk]);
       // HV
-      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1','"+hash+"','HV') RETURNING matk");
-      await client.query("INSERT INTO hocvien(matk,hoten,sdt) VALUES($1,'Học viên Mẫu','0900000004')",[hv.rows[0].matk]);
+      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1','" + hash + "','HV') RETURNING matk");
+      await client.query("INSERT INTO hocvien(matk,hoten,sdt) VALUES($1,'Học viên Mẫu','0900000004')", [hv.rows[0].matk]);
       // GS
-      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1','"+hash+"','GS') RETURNING matk");
-      await client.query("INSERT INTO giasu(matk,hoten,ngaysinh,gioitinh,cccd,sdt,trinhdohocvan,chuyennganh,kinhnghiem,khuvuc,hocphimongmuon,trangthaihoso) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')",[gs.rows[0].matk]);
+      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1','" + hash + "','GS') RETURNING matk");
+      await client.query("INSERT INTO giasu(matk,hoten,ngaysinh,gioitinh,cccd,sdt,trinhdohocvan,chuyennganh,kinhnghiem,khuvuc,hocphimongmuon,trangthaihoso) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')", [gs.rows[0].matk]);
       await client.query('COMMIT');
       console.log('Seed data thành công. Tài khoản mặc định: admin/admin123, hocvien1/admin123, giasu1/admin123, nhanvien/admin123, giamdoc/admin123');
-    } catch(e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }
     finally { client.release(); }
-  } catch(e) { console.error('Seed check error:', e.message); }
+  } catch (e) { console.error('Seed check error:', e.message); }
 }
 
 // Start

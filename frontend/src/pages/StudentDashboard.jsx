@@ -589,7 +589,7 @@ function StudentDashboard() {
                           <td>{r.tenmh}</td>
                           <td>{r.caplop}</td>
                           <td>
-                            <strong>Đã học: {r.songayhoc} buổi</strong><br />
+                            <strong>Số buổi/tuần: {r.songayhoc}</strong><br />
                             <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatLichHoc(r.lichhoctrongtuan)}</span>
                           </td>
                           <td>

@@ -61,6 +61,7 @@ function AdminDashboard() {
   });
   const [allTutors, setAllTutors] = useState([]);
   const [allStudents, setAllStudents] = useState([]);
+  const [subjects, setSubjects] = useState([]);
 
   const getDefaultHocPhi = (cap) => {
     if (cap === 'Cấp 1') return defaultHocPhis.HocPhi_Cap1;
@@ -82,6 +83,8 @@ function AdminDashboard() {
   const [showCreateClassModal, setShowCreateClassModal] = useState(false);
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
   const [showCreateCommissionModal, setShowCreateCommissionModal] = useState(false);
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [editingSubject, setEditingSubject] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
   
   useEffect(() => {
@@ -91,7 +94,7 @@ function AdminDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statRes, tutRes, reqRes, classRes, tuitRes, commRes, suppRes, absRes, chartRes, accRes, profRes, meRes, tyleRes, hpRes, allTutorsRes, allStudentsRes] = await Promise.all([
+      const [statRes, tutRes, reqRes, classRes, tuitRes, commRes, suppRes, absRes, chartRes, accRes, profRes, meRes, tyleRes, hpRes, allTutorsRes, allStudentsRes, subjRes] = await Promise.all([
         fetch('/api/nhanvien/stats').then(r => r.json()),
         fetch('/api/nhanvien/giasu/pending').then(r => r.json()),
         fetch('/api/nhanvien/yeucau').then(r => r.json()),
@@ -107,7 +110,8 @@ function AdminDashboard() {
         fetch('/api/nhanvien/config/tylehh').then(r => r.json()),
         fetch('/api/nhanvien/config/hocphi').then(r => r.json()),
         fetch('/api/nhanvien/giasu').then(r => r.json()),
-        fetch('/api/nhanvien/hocvien').then(r => r.json())
+        fetch('/api/nhanvien/hocvien').then(r => r.json()),
+        fetch('/api/monhoc/all').then(r => r.json())
       ]);
 
       if (!statRes.success) {
@@ -135,6 +139,7 @@ function AdminDashboard() {
       }
       setAllTutors(allTutorsRes.data || []);
       setAllStudents(allStudentsRes.data || []);
+      setSubjects(subjRes.data || []);
     } catch (e) {
       console.error(e);
       setGlobalError('Lỗi tải dữ liệu bảng điều khiển.');
@@ -696,6 +701,13 @@ function AdminDashboard() {
           </div>
         )}
 
+        {currentUser && (currentUser.vaitro === 'SA' || currentUser.vaitro === 'BGD') && (
+          <div className={`stats-card${activeTab === 'subjects' ? ' active-card' : ''}`} onClick={() => handleTabChange('subjects')} style={{ cursor: 'pointer', border: activeTab === 'subjects' ? '2px solid var(--color-info)' : '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="stats-icon text-info"><BookOpen size={24} /></div>
+            <div className="stats-info"><span className="stats-label">Quản Lý Môn Học</span><span className="stats-value">{subjects.length}</span></div>
+          </div>
+        )}
+
         {currentUser && currentUser.vaitro === 'BGD' && (
           <div className={`stats-card${activeTab === 'settings' ? ' active-card' : ''}`} onClick={() => handleTabChange('settings')} style={{ cursor: 'pointer', border: activeTab === 'settings' ? '2px solid #94a3b8' : '1px solid rgba(255,255,255,0.05)' }}>
             <div className="stats-icon" style={{ color: '#94a3b8' }}><Settings size={24} /></div>
@@ -771,7 +783,7 @@ function AdminDashboard() {
                       <td>{r.tenmh}</td>
                       <td>{r.caplop}</td>
                       <td>
-                        <strong>Đã học: {r.songayhoc} buổi</strong><br/>
+                        <strong>Số buổi/tuần: {r.songayhoc}</strong><br/>
                         <span style={{fontSize:'12px',color:'#94a3b8'}}>{formatLichHoc(r.lichhoctrongtuan)}</span>
                       </td>
                       <td>
@@ -1098,6 +1110,92 @@ function AdminDashboard() {
             );
           })()}
 
+          {/* SUBJECTS TAB */}
+          {activeTab === 'subjects' && currentUser && (currentUser.vaitro === 'SA' || currentUser.vaitro === 'BGD') && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h3>Quản Lý Danh Sách Môn Học</h3>
+                <button className="btn btn-primary" onClick={() => { setEditingSubject(null); setShowSubjectModal(true); }}>
+                  <PlusCircle size={16} style={{ marginRight: '5px', verticalAlign: 'middle' }} /> Thêm Môn Mới
+                </button>
+              </div>
+              
+              <div className="table-responsive">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Tên Môn Học</th>
+                      <th>Cấp Học</th>
+                      <th>Mô Tả</th>
+                      <th>Trạng Thái</th>
+                      <th>Hành Động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subjects.length === 0 ? (
+                      <tr><td colSpan="6" style={{ textAlign: 'center' }}>Chưa có môn học nào</td></tr>
+                    ) : (
+                      subjects.map(s => (
+                        <tr key={s.mamh}>
+                          <td>#{s.mamh}</td>
+                          <td><strong>{s.tenmh}</strong></td>
+                          <td>{s.caphoc || '-'}</td>
+                          <td>{s.mota || '-'}</td>
+                          <td>
+                            <span className={`status-badge ${s.trangthai === 'HoatDong' ? 'status-active' : 'status-disabled'}`}>
+                              {s.trangthai === 'HoatDong' ? 'Hoạt Động' : 'Đã Ẩn'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                              <button 
+                                className="btn btn-xs btn-info"
+                                onClick={() => { setEditingSubject(s); setShowSubjectModal(true); }}
+                              >
+                                Sửa
+                              </button>
+                              <button 
+                                className={`btn btn-xs ${s.trangthai === 'HoatDong' ? 'btn-secondary' : 'btn-teal'}`}
+                                onClick={async () => {
+                                  const action = s.trangthai === 'HoatDong' ? 'Ẩn' : 'Hiện';
+                                  const res = await Swal.fire({
+                                    title: 'Xác nhận',
+                                    text: `Bạn muốn ${action} môn học này?`,
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Đồng ý',
+                                    cancelButtonText: 'Hủy',
+                                    background: '#1e293b',
+                                    color: '#fff'
+                                  });
+                                  if (res.isConfirmed) {
+                                    try {
+                                      const response = await fetch(`/api/monhoc/${s.mamh}`, { method: 'DELETE' });
+                                      const json = await response.json();
+                                      if (json.success) {
+                                        showMsg('success', 'Thao tác thành công');
+                                        fetchData();
+                                      } else {
+                                        showMsg('error', json.message);
+                                      }
+                                    } catch(e) { showMsg('error', 'Lỗi kết nối'); }
+                                  }
+                                }}
+                              >
+                                {s.trangthai === 'HoatDong' ? 'Xóa Mềm (Ẩn)' : 'Khôi phục'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && currentUser?.vaitro === 'BGD' && (
             <div className="glass-card" style={{ padding: '20px', maxWidth: '500px' }}>
@@ -1332,6 +1430,7 @@ function AdminDashboard() {
       {/* Finance Modals */}
       {showCreateInvoiceModal && (
         <TuitionInvoiceModal 
+          classes={classes}
           onClose={() => setShowCreateInvoiceModal(false)}
           onSuccess={() => {
             setShowCreateInvoiceModal(false);
@@ -1342,6 +1441,7 @@ function AdminDashboard() {
       
       {showCreateCommissionModal && (
         <SalaryInvoiceModal 
+          classes={classes}
           onClose={() => setShowCreateCommissionModal(false)}
           onSuccess={() => {
             setShowCreateCommissionModal(false);
@@ -1367,7 +1467,14 @@ function AdminDashboard() {
             </div>
             
             {(() => {
-              const sortedTutors = [...allTutors].map(gs => {
+              const reqMaMH = selectedRequest?.mamh;
+              const reqTenMH = selectedRequest?.tenmh;
+              const sortedTutors = [...allTutors].filter(gs => {
+                if (!reqMaMH) return true; // fallback
+                const hasRegistered = gs.registered_subjects && gs.registered_subjects.includes(reqMaMH);
+                const isMajorMatch = gs.chuyennganh === reqTenMH;
+                return hasRegistered || isMajorMatch;
+              }).map(gs => {
                 const matchCount = getMatchCount(selectedRequest?.lichhoctrongtuan, gs.lichranh);
                 return { ...gs, matchCount };
               }).sort((a, b) => b.matchCount - a.matchCount);
@@ -1428,6 +1535,55 @@ function AdminDashboard() {
         </div>
       )}
 
+      {/* Subject Modal */}
+      {showSubjectModal && (
+        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>{editingSubject ? 'Sửa Môn Học' : 'Thêm Môn Học Mới'}</h3>
+              <span className="close-btn" onClick={() => setShowSubjectModal(false)}>&times;</span>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const tenmh = e.target.tenmh.value;
+              const caphoc = e.target.caphoc.value;
+              const mota = e.target.mota.value;
+              try {
+                const url = editingSubject ? `/api/monhoc/${editingSubject.mamh}` : '/api/monhoc';
+                const method = editingSubject ? 'PUT' : 'POST';
+                const response = await fetch(url, {
+                  method,
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tenmh, caphoc, mota })
+                });
+                const json = await response.json();
+                if (json.success) {
+                  showMsg('success', 'Đã lưu môn học');
+                  setShowSubjectModal(false);
+                  fetchData();
+                } else {
+                  showMsg('error', json.message);
+                }
+              } catch(err) { showMsg('error', 'Lỗi kết nối'); }
+            }}>
+              <div className="form-group">
+                <label>Tên Môn Học *</label>
+                <input type="text" name="tenmh" required defaultValue={editingSubject?.tenmh || ''} />
+              </div>
+              <div className="form-group">
+                <label>Cấp Học</label>
+                <input type="text" name="caphoc" placeholder="VD: THCS, THPT" defaultValue={editingSubject?.caphoc || ''} />
+              </div>
+              <div className="form-group">
+                <label>Mô Tả</label>
+                <input type="text" name="mota" defaultValue={editingSubject?.mota || ''} />
+              </div>
+              <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '15px' }}>Lưu</button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Class Detail Modal */}
       {showClassDetailModal && (
         <div className="modal" style={{ display: 'flex' }}>
@@ -1456,7 +1612,7 @@ function AdminDashboard() {
                       )}
                     </div>
                     <div><strong>Ngày bắt đầu:</strong> {classDetail.info.ngaybatdau ? new Date(classDetail.info.ngaybatdau).toLocaleDateString('vi-VN') : 'N/A'}</div>
-                    <div><strong>Số buổi đã học:</strong> {classDetail.info.songayhoc !== undefined ? classDetail.info.songayhoc : 'N/A'}</div>
+                    <div><strong>Số buổi/tuần:</strong> {classDetail.info.songayhoc !== undefined ? classDetail.info.songayhoc : 'N/A'}</div>
                     <div style={{ gridColumn: 'span 2' }}><strong>Lịch học:</strong> {formatLichHoc(classDetail.info.lichhoctrongtuan)}</div>
                   </div>
                 </div>

@@ -1,7 +1,25 @@
 import React from "react";
 import Swal from "sweetalert2";
 
-const TuitionInvoiceModal = ({ onClose, onSuccess }) => {
+const TuitionInvoiceModal = ({ onClose, onSuccess, classes = [] }) => {
+  const activeClasses = classes.filter(c => c.trangthai === 'DangDay');
+  const [selectedClass, setSelectedClass] = React.useState('');
+  const [mahv, setMahv] = React.useState('');
+  const [hocphi, setHocphi] = React.useState('');
+
+  const handleClassChange = (e) => {
+    const malop = e.target.value;
+    setSelectedClass(malop);
+    const cls = activeClasses.find(c => c.malop.toString() === malop);
+    if (cls) {
+      setMahv(cls.mahv ? 'HV' + cls.mahv.toString().padStart(6, '0') : 'Lỗi: Thiếu mã học viên');
+      setHocphi(cls.hocphimoibuoi || '');
+    } else {
+      setMahv('');
+      setHocphi('');
+    }
+  };
+
   const showMsg = (icon, title) => {
     Swal.fire({
       icon,
@@ -49,12 +67,19 @@ const TuitionInvoiceModal = ({ onClose, onSuccess }) => {
         </div>
         <form onSubmit={handleCreateInvoice}>
           <div className="form-group">
-            <label>Mã Lớp *</label>
-            <input type="text" name="malop" required placeholder="VD: L000001" />
+            <label>Chọn lớp đang học *</label>
+            <select name="malop" required value={selectedClass} onChange={handleClassChange}>
+              <option value="" disabled>-- Chọn lớp học --</option>
+              {activeClasses.map(c => (
+                <option key={c.malop} value={c.malop}>
+                  Lớp #{c.malop} - {c.tenmh} (Học viên: {c.tenhocvien})
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label>Mã Học Viên *</label>
-            <input type="text" name="mahv" required placeholder="VD: HV000001" />
+            <input type="text" name="mahv" required value={mahv} readOnly placeholder="Tự động điền" style={{backgroundColor: 'rgba(255,255,255,0.05)'}} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
             <div className="form-group">
@@ -73,7 +98,7 @@ const TuitionInvoiceModal = ({ onClose, onSuccess }) => {
             </div>
             <div className="form-group">
               <label>Học phí mỗi buổi (VND) *</label>
-              <input type="number" name="hocphimoibuoi" required min="0" step="1000" />
+              <input type="number" name="hocphimoibuoi" required min="0" step="1000" value={hocphi} onChange={(e) => setHocphi(e.target.value)} />
             </div>
           </div>
           <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "15px" }}>

@@ -385,8 +385,8 @@ header {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* ==========================================================================
@@ -762,7 +762,7 @@ textarea {
   z-index: 200;
   background: rgba(5, 5, 8, 0.7);
   backdrop-filter: blur(8px);
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 20px;
   overflow-y: auto;
@@ -777,7 +777,7 @@ textarea {
   max-width: 550px;
   max-height: calc(100vh - 40px);
   overflow-y: auto;
-  margin: auto;
+  margin: 0;
   border-color: rgba(255,255,255,0.12);
   animation: modalSlide 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }

@@ -504,6 +504,59 @@ function TutorDashboard() {
     cells.push({ isPadding: false, day, dateStr, daySessions, key: `day-${day}` });
   }
 
+  const handleAcceptClass = async (classId) => {
+    const result = await Swal.fire({
+      title: 'Nhận lớp',
+      text: 'Bạn xác nhận sẽ nhận dạy lớp này?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/giasu/lop/${classId}/nhan`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        fetchData();
+      } else {
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    } catch (e) {
+      Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
+  };
+
+  const handleRejectClass = async (classId) => {
+    const result = await Swal.fire({
+      title: 'Từ chối lớp',
+      text: 'Bạn có chắc chắn muốn từ chối lớp này? Lớp sẽ được chuyển cho gia sư khác.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: 'Từ chối',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/giasu/lop/${classId}/tuchoi`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        fetchData();
+      } else {
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    } catch (e) {
+      Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
+  };
+
   if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Đang tải...</div>;
   if (!profile) return null;
 
@@ -586,19 +639,35 @@ function TutorDashboard() {
                           <td>{c.tenhocvien}</td>
                           <td>{c.songayhoc || '?'} ngày</td>
                           <td>
-                            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                              <button 
-                                className="btn btn-xs btn-teal" 
-                                disabled={profile.trangthaihoso !== 'DaDuyet'} 
-                                onClick={() => handleOpenCalendar(c.malop)}
-                                style={profile.trangthaihoso !== 'DaDuyet' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                              >
-                                📅 Lịch dạy & Ghi nhận
-                              </button>
-                              <button className="btn btn-xs btn-rose" onClick={() => { setSelectedClassId(c.malop); setShowResignModal(true); }}>
-                                Xin nghỉ
-                              </button>
-                            </div>
+                            {c.trangthai === 'DaPhanCong' ? (
+                              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', flexDirection: 'column' }}>
+                                <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '4px' }}>
+                                  ⏳ Chờ xác nhận {c.hanxacnhan ? `(Hạn: ${new Date(c.hanxacnhan).toLocaleString('vi-VN')})` : ''}
+                                </div>
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                  <button className="btn btn-xs btn-primary" onClick={() => handleAcceptClass(c.malop)}>
+                                    <CheckCircle size={14} style={{marginRight: '4px'}}/> Nhận lớp
+                                  </button>
+                                  <button className="btn btn-xs btn-rose" onClick={() => handleRejectClass(c.malop)}>
+                                    <XCircle size={14} style={{marginRight: '4px'}}/> Từ chối
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                                <button 
+                                  className="btn btn-xs btn-teal" 
+                                  disabled={profile.trangthaihoso !== 'DaDuyet'} 
+                                  onClick={() => handleOpenCalendar(c.malop)}
+                                  style={profile.trangthaihoso !== 'DaDuyet' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                >
+                                  📅 Lịch dạy & Ghi nhận
+                                </button>
+                                <button className="btn btn-xs btn-rose" onClick={() => { setSelectedClassId(c.malop); setShowResignModal(true); }}>
+                                  Xin nghỉ
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -722,11 +791,9 @@ function TutorDashboard() {
             <div className="form-group">
               <label>Chuyên ngành *</label>
               <select name="chuyennganh" defaultValue={profile.chuyennganh} required>
-                <option value="Sư phạm Toán">Sư phạm Toán</option>
-                <option value="Sư phạm Ngữ Văn">Sư phạm Ngữ Văn</option>
-                <option value="Sư phạm Tiếng Anh">Sư phạm Tiếng Anh</option>
-                <option value="Sư phạm Vật lý">Sư phạm Vật lý</option>
-                <option value="Sư phạm Hóa học">Sư phạm Hóa học</option>
+                {allSubjects.map(s => (
+                  <option key={s.mamh} value={s.tenmh}>{s.tenmh}</option>
+                ))}
                 <option value="Khác">Khác</option>
               </select>
             </div>

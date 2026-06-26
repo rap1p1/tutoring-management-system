@@ -1,7 +1,22 @@
 import React from "react";
 import Swal from "sweetalert2";
 
-const SalaryInvoiceModal = ({ onClose, onSuccess }) => {
+const SalaryInvoiceModal = ({ onClose, onSuccess, classes = [] }) => {
+  const activeClasses = classes.filter(c => c.trangthai === 'DangDay' && c.mags);
+  const [selectedClass, setSelectedClass] = React.useState('');
+  const [mags, setMags] = React.useState('');
+
+  const handleClassChange = (e) => {
+    const malop = e.target.value;
+    setSelectedClass(malop);
+    const cls = activeClasses.find(c => c.malop.toString() === malop);
+    if (cls) {
+      setMags(cls.mags ? 'GS' + cls.mags.toString().padStart(6, '0') : 'Lỗi: Thiếu mã gia sư');
+    } else {
+      setMags('');
+    }
+  };
+
   const showMsg = (icon, title) => {
     Swal.fire({
       icon,
@@ -46,14 +61,21 @@ const SalaryInvoiceModal = ({ onClose, onSuccess }) => {
           <span className="close-btn" onClick={onClose}>&times;</span>
         </div>
         <form onSubmit={handleCreateCommission}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "15px", marginBottom: "15px" }}>
             <div className="form-group">
-              <label>Mã Gia Sư *</label>
-              <input type="text" name="mags" required placeholder="VD: GS000001" />
+              <label>Chọn lớp đang học *</label>
+              <select name="malop" required value={selectedClass} onChange={handleClassChange}>
+                <option value="" disabled>-- Chọn lớp học --</option>
+                {activeClasses.map(c => (
+                  <option key={c.malop} value={c.malop}>
+                    Lớp #{c.malop} - {c.tenmh} (Gia sư: {c.tengiasu})
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
-              <label>Mã Lớp *</label>
-              <input type="text" name="malop" required placeholder="VD: L000001" />
+              <label>Mã Gia Sư *</label>
+              <input type="text" name="mags" required value={mags} readOnly placeholder="Tự động điền" style={{backgroundColor: 'rgba(255,255,255,0.05)'}} />
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>

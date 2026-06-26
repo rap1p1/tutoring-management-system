@@ -180,6 +180,7 @@ CREATE TABLE LOP (
   NgayBatDau        DATE,
   NgayKetThucDuKien DATE,
   NgayKetThucThucTe DATE,
+  HanXacNhan        TIMESTAMP,
   SoGio             DECIMAL(4,1)   CHECK (SoGio > 0),
   TrangThai         VARCHAR(30)    NOT NULL DEFAULT 'ChoGhep' CHECK (TrangThai IN ('ChoGhep','DaPhanCong','DangDay','KetThuc','Huy')),
   NoiDung           VARCHAR(300),

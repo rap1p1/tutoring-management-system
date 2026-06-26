@@ -142,7 +142,13 @@ router.get('/giasu', async (req, res) => {
                 FROM lichranh_giasu lr 
                 WHERE lr.mags = gs.mags), 
                '[]'::json
-             ) as lichranh
+             ) as lichranh,
+             COALESCE(
+               (SELECT json_agg(gm.mamh) 
+                FROM giasu_monhoc gm 
+                WHERE gm.mags = gs.mags),
+               '[]'::json
+             ) as registered_subjects
       FROM giasu gs
       ORDER BY gs.hoten
     `;
@@ -294,11 +300,28 @@ router.post('/lop/create', requireOps, async (req, res) => {
     }
 
     // Lấy thông tin yêu cầu học kèm (để lấy số ngày + lịch học + cấp lớp)
-    const ycR = await client.query('SELECT songayhoc, lichhoctrongtuan, caplop FROM yeucauhockem WHERE mayc = $1', [mayc]);
+    const ycR = await client.query(`
+      SELECT yc.songayhoc, yc.lichhoctrongtuan, yc.caplop, yc.mamh, mh.tenmh 
+      FROM yeucauhockem yc 
+      JOIN monhoc mh ON mh.mamh = yc.mamh 
+      WHERE yc.mayc = $1
+    `, [mayc]);
     if (!ycR.rows.length) {
       return res.json({ success: false, message: 'Không tìm thấy yêu cầu học kèm' });
     }
-    const caplop = ycR.rows[0].caplop;
+    const { caplop, mamh, tenmh } = ycR.rows[0];
+
+    // Khóa cứng: Kiểm tra xem gia sư có đăng ký môn này hoặc có chuyên ngành khớp môn này không
+    const subjectCheck = await client.query(`
+      SELECT 1 
+      FROM giasu gs 
+      LEFT JOIN giasu_monhoc gm ON gs.mags = gm.mags AND gm.mamh = $1 
+      WHERE gs.mags = $2 AND (gm.mamh IS NOT NULL OR gs.chuyennganh = $3)
+    `, [mamh, parsedMaGS, tenmh]);
+    
+    if (!subjectCheck.rows.length) {
+      return res.json({ success: false, message: 'Gia sư chưa đăng ký môn học này và chuyên ngành cũng không khớp. Vui lòng chọn gia sư khác.' });
+    }
 
     // Lấy học phí mặc định từ DB
     const getDbDefaultHocPhi = async (cap) => {
@@ -357,12 +380,43 @@ router.post('/lop/create', requireOps, async (req, res) => {
       return res.json({ success: false, message: 'Lịch học trong tuần không hợp lệ' });
     }
 
+    // TỰ ĐỘNG SINH BUỔI DẠY (Để kiểm tra trùng lịch trước khi tạo lớp)
+    const sessions = generateSessions(start, soNgayHoc, lichHocTrongTuan);
+
+    // KIỂM TRA TRÙNG LỊCH GIA SƯ
+    const existingSessions = await client.query(
+      `SELECT bd.ngayday, bd.cahoc 
+       FROM buoiday bd 
+       JOIN lop l ON bd.malop = l.malop 
+       WHERE l.mags = $1 AND l.trangthai IN ('DangDay', 'DaPhanCong') AND bd.trangthai IN ('ChoXacNhan', 'DaDay')`,
+      [parsedMaGS]
+    );
+    
+    // Tạo Set các chuỗi "YYYY-MM-DD_Cahoc" để dò tìm nhanh
+    const existingMap = new Set(
+      existingSessions.rows.map(s => {
+        // format date to YYYY-MM-DD regardless of timezone issues
+        const d = new Date(s.ngayday);
+        const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        return `${dateStr}_${s.cahoc}`;
+      })
+    );
+    
+    for (const session of sessions) {
+      if (existingMap.has(`${session.ngayday}_${session.cahoc}`)) {
+        return res.json({ 
+          success: false, 
+          message: `Gia sư đã bị trùng lịch vào ngày ${session.ngayday.split('-').reverse().join('/')} (Ca ${session.cahoc === 'Sang' ? 'Sáng' : session.cahoc === 'Chieu' ? 'Chiều' : 'Tối'}). Vui lòng chọn gia sư khác!` 
+        });
+      }
+    }
+
     await client.query('BEGIN');
     
-    // Tạo lớp học (luôn ở trạng thái DangDay vì đã bắt buộc có gia sư)
+    // Tạo lớp học (luôn ở trạng thái DaPhanCong chờ gia sư xác nhận trong 24h)
     const lopR = await client.query(
-      `INSERT INTO lop (mayc, mags, manv_phancong, ngaybatdau, ngayketthucdukien, trangthai, noidung, diadiem, hinhthuchoc, hocphimoibuoi, tylehhgiasu)
-       VALUES ($1, $2, $3, $4, $5, 'DangDay', $6, $7, $8, $9, $10) RETURNING *`,
+      `INSERT INTO lop (mayc, mags, manv_phancong, ngaybatdau, ngayketthucdukien, trangthai, hanxacnhan, noidung, diadiem, hinhthuchoc, hocphimoibuoi, tylehhgiasu)
+       VALUES ($1, $2, $3, $4, $5, 'DaPhanCong', NOW() + INTERVAL '24 hours', $6, $7, $8, $9, $10) RETURNING *`,
       [
         mayc, 
         parsedMaGS, 
@@ -379,8 +433,7 @@ router.post('/lop/create', requireOps, async (req, res) => {
     
     const malop = lopR.rows[0].malop;
     
-    // TỰ ĐỘNG SINH BUỔI DẠY
-    const sessions = generateSessions(start, soNgayHoc, lichHocTrongTuan);
+    // TỰ ĐỘNG SINH BUỔI DẠY (Đã sinh ở trên)
     
     for (const session of sessions) {
       await client.query(
@@ -411,7 +464,7 @@ router.post('/lop/create', requireOps, async (req, res) => {
 router.get('/lop', async (req, res) => {
   try {
     const r = await pool(req).query(
-      `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop
+      `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop, yc.mahv
        FROM lop l
        JOIN yeucauhockem yc ON yc.mayc = l.mayc
        JOIN hocvien hv ON hv.mahv = yc.mahv
