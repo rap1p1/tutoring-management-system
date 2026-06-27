@@ -651,6 +651,86 @@ function AdminDashboard() {
     </div>
   );
 
+  const handleChangePassword = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Đổi mật khẩu',
+      html: `
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-old" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu hiện tại">
+          <span id="toggle-old" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-new" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu mới (từ 6 ký tự)">
+          <span id="toggle-new" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-confirm" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Xác nhận mật khẩu mới">
+          <span id="toggle-confirm" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Đổi mật khẩu',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff',
+      didOpen: () => {
+        const toggleVisibility = (inputId, iconId) => {
+          const input = document.getElementById(inputId);
+          const icon = document.getElementById(iconId);
+          icon.addEventListener('click', () => {
+            if (input.type === 'password') {
+              input.type = 'text';
+              icon.innerText = '🙈';
+            } else {
+              input.type = 'password';
+              icon.innerText = '👁️';
+            }
+          });
+        };
+        toggleVisibility('swal-input-old', 'toggle-old');
+        toggleVisibility('swal-input-new', 'toggle-new');
+        toggleVisibility('swal-input-confirm', 'toggle-confirm');
+      },
+      preConfirm: () => {
+        const oldPass = document.getElementById('swal-input-old').value;
+        const newPass = document.getElementById('swal-input-new').value;
+        const confirmPass = document.getElementById('swal-input-confirm').value;
+        if (!oldPass || !newPass || !confirmPass) {
+          Swal.showValidationMessage('Vui lòng nhập đầy đủ thông tin');
+          return false;
+        }
+        if (newPass.length < 6) {
+          Swal.showValidationMessage('Mật khẩu mới phải từ 6 ký tự');
+          return false;
+        }
+        if (newPass !== confirmPass) {
+          Swal.showValidationMessage('Xác nhận mật khẩu không khớp');
+          return false;
+        }
+        return { currentPassword: oldPass, newPassword: newPass };
+      }
+    });
+
+    if (formValues) {
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formValues)
+        });
+        const json = await res.json();
+        if (json.success) {
+          Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        } else {
+          Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      } catch (e) {
+        Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    }
+  };
+
   return (
     <div className="view-section" style={{ display: 'block' }}>
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -664,12 +744,20 @@ function AdminDashboard() {
         <div className="glass-card mb-4" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Thông Tin Cá Nhân Nhân Viên</h3>
-            <button 
-              className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
-              onClick={handleToggle2FA}
-            >
-              {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn btn-sm btn-secondary" 
+                onClick={handleChangePassword}
+              >
+                Đổi mật khẩu
+              </button>
+              <button 
+                className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
+                onClick={handleToggle2FA}
+              >
+                {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
+              </button>
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
             <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Nhân Viên (ID)</strong> {profile.manv ? 'NV' + profile.manv.toString().padStart(6, '0') : ''}</div>

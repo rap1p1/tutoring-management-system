@@ -1104,6 +1104,40 @@ router.post('/config/hocphi', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
+// Đếm số buổi Đã Dạy chưa thanh toán
+router.get('/lop/:id/unbilled-stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const type = req.query.type || 'tuition'; // 'tuition' or 'commission'
+    const table = type === 'commission' ? 'hoahong' : 'hochphi';
+
+    // Lấy ngày chốt cuối cùng của hóa đơn trước đó
+    const lastBilledQuery = await pool(req).query(`SELECT MAX(kytt_den) as last_date FROM ${table} WHERE malop = $1 AND trangthai != 'Huy'`, [id]);
+    const lastDate = lastBilledQuery.rows[0].last_date;
+
+    // Đếm số buổi DaDay sau ngày chốt cuối cùng
+    let countQuery;
+    let countParams = [id];
+    if (lastDate) {
+      countQuery = `SELECT COUNT(*) as count FROM buoiday WHERE malop = $1 AND trangthai = 'DaDay' AND ngayday > $2`;
+      countParams.push(lastDate);
+    } else {
+      countQuery = `SELECT COUNT(*) as count FROM buoiday WHERE malop = $1 AND trangthai = 'DaDay'`;
+    }
+    const countResult = await pool(req).query(countQuery, countParams);
+    
+    res.json({
+      success: true,
+      data: {
+        last_billed_date: lastDate,
+        unbilled_sessions: parseInt(countResult.rows[0].count) || 0
+      }
+    });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
+});
+
 // Lấy chi tiết lớp học đầy đủ (kèm học viên, gia sư và tiến độ buổi học)
 router.get('/lop/:id/detail', async (req, res) => {
   try {

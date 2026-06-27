@@ -1,11 +1,28 @@
-import React from "react";
+import React, { useState } from "react";
 import Swal from "sweetalert2";
 
 const TuitionInvoiceModal = ({ onClose, onSuccess, classes = [] }) => {
   const activeClasses = classes.filter(c => c.trangthai === 'DangDay');
-  const [selectedClass, setSelectedClass] = React.useState('');
-  const [mahv, setMahv] = React.useState('');
-  const [hocphi, setHocphi] = React.useState('');
+  const [selectedClass, setSelectedClass] = useState('');
+  const [mahv, setMahv] = useState('');
+  const [hocphi, setHocphi] = useState('');
+  const [sobuoi, setSobuoi] = useState('');
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const fetchUnbilledStats = async (malop) => {
+    setLoadingStats(true);
+    setSobuoi('');
+    try {
+      const res = await fetch(`/api/nhanvien/lop/${malop}/unbilled-stats?type=tuition`);
+      const json = await res.json();
+      if (json.success) {
+        setSobuoi(json.data.unbilled_sessions);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoadingStats(false);
+  };
 
   const handleClassChange = (e) => {
     const malop = e.target.value;
@@ -14,9 +31,11 @@ const TuitionInvoiceModal = ({ onClose, onSuccess, classes = [] }) => {
     if (cls) {
       setMahv(cls.mahv ? 'HV' + cls.mahv.toString().padStart(6, '0') : 'Lỗi: Thiếu mã học viên');
       setHocphi(cls.hocphimoibuoi || '');
+      fetchUnbilledStats(malop);
     } else {
       setMahv('');
       setHocphi('');
+      setSobuoi('');
     }
   };
 
@@ -33,17 +52,21 @@ const TuitionInvoiceModal = ({ onClose, onSuccess, classes = [] }) => {
 
   const handleCreateInvoice = async (e) => {
     e.preventDefault();
+    if (sobuoi === 0) {
+      Swal.fire({ title: 'Lỗi', text: 'Không có buổi học nào chưa được thanh toán!', icon: 'error', background: '#1e293b', color: '#fff' });
+      return;
+    }
     try {
       const res = await fetch("/api/nhanvien/hocphi/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           malop: e.target.malop.value,
-          mahv: e.target.mahv.value,
+          mahv: mahv.replace('HV', ''),
           kytt_tu: e.target.kytt_tu.value,
           kytt_den: e.target.kytt_den.value,
-          sobuoi: parseInt(e.target.sobuoi.value),
-          hocphimoibuoi: parseInt(e.target.hocphimoibuoi.value),
+          sobuoi: parseInt(sobuoi),
+          hocphimoibuoi: parseInt(hocphi),
         }),
       });
       const json = await res.json();
@@ -93,15 +116,27 @@ const TuitionInvoiceModal = ({ onClose, onSuccess, classes = [] }) => {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
             <div className="form-group">
-              <label>Số buổi học *</label>
-              <input type="number" name="sobuoi" required min="1" />
+              <label>Số buổi học (Tự động tính) *</label>
+              <input 
+                type="number" 
+                name="sobuoi" 
+                required 
+                value={loadingStats ? '...' : sobuoi} 
+                readOnly 
+                style={{backgroundColor: 'rgba(255,255,255,0.05)', color: sobuoi === 0 ? '#ef4444' : '#10b981', fontWeight: 'bold'}} 
+              />
             </div>
             <div className="form-group">
               <label>Học phí mỗi buổi (VND) *</label>
               <input type="number" name="hocphimoibuoi" required min="0" step="1000" value={hocphi} onChange={(e) => setHocphi(e.target.value)} />
             </div>
           </div>
-          <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "15px" }}>
+          {sobuoi === 0 && selectedClass && !loadingStats && (
+            <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '15px' }}>
+              ⚠️ Lớp này chưa có buổi học nào Đã Dạy hoặc tất cả đã được thanh toán.
+            </div>
+          )}
+          <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "15px" }} disabled={loadingStats || sobuoi === 0}>
             Tạo Hóa Đơn
           </button>
         </form>

@@ -398,4 +398,48 @@ router.put('/toggle-2fa', async (req, res) => {
   }
 });
 
+// ============================================================
+// ĐỔI MẬT KHẨU (Yêu cầu đăng nhập)
+// ============================================================
+router.post('/change-password', async (req, res) => {
+  if (!req.session.user) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.json({ success: false, message: 'Vui lòng nhập đầy đủ mật khẩu cũ và mới' });
+    }
+    if (newPassword.length < 6) {
+      return res.json({ success: false, message: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
+    }
+
+    const matk = req.session.user.matk;
+    
+    // Lấy thông tin tài khoản
+    const tkResult = await pool(req).query('SELECT matkhau, authprovider FROM taikhoan WHERE matk = $1', [matk]);
+    if (tkResult.rows.length === 0) return res.json({ success: false, message: 'Không tìm thấy tài khoản' });
+    
+    const tk = tkResult.rows[0];
+    if (tk.authprovider === 'google' || !tk.matkhau) {
+      return res.json({ success: false, message: 'Tài khoản đăng nhập bằng Google không thể đổi mật khẩu' });
+    }
+
+    // Kiểm tra mật khẩu cũ
+    const bcrypt = req.app.locals.bcrypt;
+    const isMatch = await bcrypt.compare(currentPassword, tk.matkhau);
+    if (!isMatch) {
+      return res.json({ success: false, message: 'Mật khẩu hiện tại không đúng' });
+    }
+
+    // Cập nhật mật khẩu mới
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool(req).query('UPDATE taikhoan SET matkhau = $1, ngaycapnhat = NOW() WHERE matk = $2', [hash, matk]);
+
+    res.json({ success: true, message: 'Đổi mật khẩu thành công' });
+  } catch (e) {
+    console.error('Change password error:', e);
+    res.json({ success: false, message: 'Lỗi server' });
+  }
+});
+
 module.exports = router;
