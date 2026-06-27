@@ -244,6 +244,29 @@ async function seedData() {
   } catch (e) { console.error('Seed check error:', e.message); }
 }
 
+// ============================================================
+// CRONJOB: TỰ ĐỘNG CHỐT CÔNG SAU 24H
+// ============================================================
+const cron = require('node-cron');
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('[Cron] Quét các buổi học chờ xác nhận quá 24h...');
+    const result = await pool.query(
+      `UPDATE buoiday 
+       SET trangthai = 'DaDay', 
+           noidung = COALESCE(noidung, '') || ' [Hệ thống tự động xác nhận sau 24h]'
+       WHERE trangthai = 'ChoXacNhan' 
+       AND thoigianxacnhan <= NOW() - INTERVAL '24 hours'
+       RETURNING mabuoi`
+    );
+    if (result.rowCount > 0) {
+      console.log(`[Cron] Đã tự động duyệt ${result.rowCount} buổi học.`);
+    }
+  } catch (err) {
+    console.error('[Cron] Lỗi tự động duyệt:', err.message);
+  }
+});
+
 // Start
 app.listen(PORT, async () => {
   console.log(`Server chạy tại http://localhost:${PORT}`);

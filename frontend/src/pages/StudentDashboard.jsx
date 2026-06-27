@@ -347,6 +347,53 @@ function StudentDashboard() {
   };
 
   const handleStudentAbsenceClick = async (session) => {
+    if (session.trangthai === 'ChoXacNhan') {
+      const confirmResult = await Swal.fire({
+        title: 'Xác nhận buổi học',
+        html: `
+          <div style="text-align: left; font-size: 14px; margin-bottom: 15px;">
+            <p>Gia sư đã báo dạy buổi học ngày <strong>${new Date(session.ngayday).toLocaleDateString('vi-VN')}</strong> (Ca <strong>${caHocLabel(session.cahoc)}</strong>).</p>
+            <p style="margin-top: 10px;"><strong>Nội dung:</strong> ${session.noidung || 'Không có ghi chú'}</p>
+          </div>
+          <p style="font-size: 13px; color: #94a3b8;">Vui lòng xác nhận bạn đã hoàn thành buổi học này, hoặc báo vắng nếu có sai sót.</p>
+        `,
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: 'Xác nhận đã học',
+        denyButtonText: 'Báo vắng/Xin nghỉ',
+        cancelButtonText: 'Đóng',
+        confirmButtonColor: '#10b981',
+        denyButtonColor: '#ef4444',
+        background: '#1e293b',
+        color: '#fff'
+      });
+
+      if (confirmResult.isConfirmed) {
+        // Gọi API xác nhận
+        try {
+          const res = await fetch('/api/hocvien/xacnhanbuoi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mabuoi: session.mabuoi })
+          });
+          const json = await res.json();
+          if (json.success) {
+            Swal.fire({ title: 'Thành công', text: 'Xác nhận buổi học thành công!', icon: 'success', background: '#1e293b', color: '#fff' });
+            fetchClassSessions(selectedClassId);
+          } else {
+            Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+          }
+        } catch (e) {
+          Swal.fire({ title: 'Lỗi kết nối', text: 'Không thể kết nối đến máy chủ', icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+        return;
+      } else if (!confirmResult.isDenied) {
+        return; // Đóng
+      }
+      // Nếu isDenied thì chạy tiếp logic báo vắng bên dưới
+    }
+
+    // Logic báo vắng
     const sessionDate = new Date(session.ngayday);
     if (session.cahoc === 'Sang') sessionDate.setHours(7, 0, 0, 0);
     else if (session.cahoc === 'Chieu') sessionDate.setHours(14, 0, 0, 0);
@@ -740,10 +787,10 @@ function StudentDashboard() {
         </div>
       )}
 
-      {/* Request Modal - ĐƠN GIẢN HÓA */}
+      {/* Request Modal - CÓ TKB PREVIEW */}
       {showRequestModal && (
         <div className="modal" style={{ display: 'flex' }}>
-          <div className="modal-content glass-card" style={{ maxWidth: '600px' }}>
+          <div className="modal-content glass-card" style={{ maxWidth: '1000px', width: '95%' }}>
             <div className="modal-header">
               <h3>Gửi Yêu Cầu Học Kèm Mới</h3>
               <span className="close-btn" onClick={() => { setShowRequestModal(false); setModalMsg({ text: '', type: '' }); setScheduleGrid({}); }}>&times;</span>
@@ -760,106 +807,164 @@ function StudentDashboard() {
               </div>
             )}
 
-            <form onSubmit={handleAddRequest}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-group">
-                  <label>Môn học *</label>
-                  <select name="mamh" required>
-                    {allSubjects.map(s => <option key={s.mamh} value={s.mamh}>{s.tenmh}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Cấp lớp *</label>
-                  <select name="caplop" required>
-                    <option value="Cấp 1">Cấp 1 (Lớp 1 - Lớp 5) - {defaultHocPhis.HocPhi_Cap1.toLocaleString()}đ/buổi</option>
-                    <option value="Cấp 2">Cấp 2 (Lớp 6 - Lớp 9) - {defaultHocPhis.HocPhi_Cap2.toLocaleString()}đ/buổi</option>
-                    <option value="Cấp 3">Cấp 3 (Lớp 10 - Lớp 12) - {defaultHocPhis.HocPhi_Cap3.toLocaleString()}đ/buổi</option>
-                    <option value="Luyện thi Đại học">Luyện thi Đại học - {defaultHocPhis.HocPhi_LuyenThiDH.toLocaleString()}đ/buổi</option>
-                    <option value="Tiếng Anh Giao tiếp">Tiếng Anh Giao tiếp - {defaultHocPhis.HocPhi_TiengAnhGT.toLocaleString()}đ/buổi</option>
-                    <option value="Chứng chỉ Quốc tế">Chứng chỉ Quốc tế - {defaultHocPhis.HocPhi_ChungChiQT.toLocaleString()}đ/buổi</option>
-                    <option value="Khác">Khác - {defaultHocPhis.HocPhi_Khac.toLocaleString()}đ/buổi</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Hình thức học</label>
-                  <select name="hinhthuc">
-                    <option value="TrucTiep">Trực tiếp tại nhà</option>
-                    <option value="Online">Online</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Bảng chọn lịch học */}
-              <div className="form-group" style={{ marginTop: '10px' }}>
-                <label style={{ marginBottom: '10px', display: 'block' }}>Lịch học trong tuần * <span style={{ fontSize: '12px', color: '#94a3b8' }}>(Tick chọn thứ + buổi)</span></label>
-                <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: 'rgba(99,102,241,0.1)' }}>
-                        <th style={{ padding: '10px', fontSize: '13px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>Ca học</th>
-                        {days.map(d => (
-                          <th key={d.value} style={{ padding: '10px', fontSize: '13px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>{d.label}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sessions.map(s => (
-                        <tr key={s.value}>
-                          <td style={{ padding: '10px', fontSize: '12px', color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{s.label}</td>
-                          {days.map(d => {
-                            const key = `${d.value}-${s.value}`;
-                            const isChecked = scheduleGrid[key] || false;
-                            return (
-                              <td key={key} style={{ textAlign: 'center', padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => toggleSchedule(d.value, s.value)}
-                                  style={{ width: '18px', height: '18px', accentColor: '#14b8a6', cursor: 'pointer' }}
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {getSelectedSchedule().length > 0 && (
-                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#10b981' }}>
-                    ✅ Đã chọn: {formatLichHoc(getSelectedSchedule())}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
+              {/* Bên trái: Form */}
+              <form onSubmit={handleAddRequest}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div className="form-group">
+                    <label>Môn học *</label>
+                    <select name="mamh" required>
+                      {allSubjects.map(s => <option key={s.mamh} value={s.mamh}>{s.tenmh}</option>)}
+                    </select>
                   </div>
-                )}
-              </div>
+                  <div className="form-group">
+                    <label>Cấp lớp *</label>
+                    <select name="caplop" required>
+                      <option value="Cấp 1">Cấp 1 (Lớp 1 - Lớp 5) - {defaultHocPhis.HocPhi_Cap1.toLocaleString()}đ/buổi</option>
+                      <option value="Cấp 2">Cấp 2 (Lớp 6 - Lớp 9) - {defaultHocPhis.HocPhi_Cap2.toLocaleString()}đ/buổi</option>
+                      <option value="Cấp 3">Cấp 3 (Lớp 10 - Lớp 12) - {defaultHocPhis.HocPhi_Cap3.toLocaleString()}đ/buổi</option>
+                      <option value="Luyện thi Đại học">Luyện thi Đại học - {defaultHocPhis.HocPhi_LuyenThiDH.toLocaleString()}đ/buổi</option>
+                      <option value="Tiếng Anh Giao tiếp">Tiếng Anh Giao tiếp - {defaultHocPhis.HocPhi_TiengAnhGT.toLocaleString()}đ/buổi</option>
+                      <option value="Chứng chỉ Quốc tế">Chứng chỉ Quốc tế - {defaultHocPhis.HocPhi_ChungChiQT.toLocaleString()}đ/buổi</option>
+                      <option value="Khác">Khác - {defaultHocPhis.HocPhi_Khac.toLocaleString()}đ/buổi</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label>Hình thức học</label>
+                    <select name="hinhthuc">
+                      <option value="TrucTiep">Trực tiếp tại nhà</option>
+                      <option value="Online">Online</option>
+                    </select>
+                  </div>
+                </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* Bảng chọn lịch học */}
+                <div className="form-group" style={{ marginTop: '10px' }}>
+                  <label style={{ marginBottom: '10px', display: 'block' }}>Lịch học trong tuần * <span style={{ fontSize: '12px', color: '#94a3b8' }}>(Tick chọn thứ + buổi)</span></label>
+                  <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'rgba(99,102,241,0.1)' }}>
+                          <th style={{ padding: '10px', fontSize: '13px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>Ca học</th>
+                          {days.map(d => (
+                            <th key={d.value} style={{ padding: '10px', fontSize: '13px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>{d.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessions.map(s => (
+                          <tr key={s.value}>
+                            <td style={{ padding: '10px', fontSize: '12px', color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{s.label}</td>
+                            {days.map(d => {
+                              const key = `${d.value}-${s.value}`;
+                              const isChecked = scheduleGrid[key] || false;
+                              return (
+                                <td key={key} style={{ textAlign: 'center', padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleSchedule(d.value, s.value)}
+                                    style={{ width: '18px', height: '18px', accentColor: '#14b8a6', cursor: 'pointer' }}
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {getSelectedSchedule().length > 0 && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#10b981' }}>
+                      ✅ Đã chọn: {formatLichHoc(getSelectedSchedule())}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div className="form-group">
+                    <label>Yêu cầu giới tính gia sư</label>
+                    <select name="gioitinh">
+                      <option value="KhongYeuCau">Không yêu cầu</option>
+                      <option value="Nam">Nam</option>
+                      <option value="Nu">Nữ</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Yêu cầu trình độ gia sư</label>
+                    <input type="text" name="trinhdo" placeholder="VD: Sinh viên Sư phạm" />
+                  </div>
+                </div>
                 <div className="form-group">
-                  <label>Yêu cầu giới tính gia sư</label>
-                  <select name="gioitinh">
-                    <option value="KhongYeuCau">Không yêu cầu</option>
-                    <option value="Nam">Nam</option>
-                    <option value="Nu">Nữ</option>
+                  <label>Khu vực học / Nơi ở *</label>
+                  <select name="diachi" required>
+                    {['Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8', 'Quận 10', 'Quận 11', 'Quận 12', 'Quận Bình Tân', 'Quận Bình Thạnh', 'Quận Gò Vấp', 'Quận Phú Nhuận', 'Quận Tân Bình', 'Quận Tân Phú', 'TP Thủ Đức', 'Huyện Bình Chánh', 'Khác'].map(kv => (
+                      <option key={kv} value={kv}>{kv}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Yêu cầu trình độ gia sư</label>
-                  <input type="text" name="trinhdo" placeholder="VD: Sinh viên Sư phạm" />
+                  <label>Ghi chú thêm</label>
+                  <textarea name="ghichu" placeholder="Các thông tin lưu ý khác..." rows="2" style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}></textarea>
+                </div>
+                <button type="submit" className="btn btn-teal btn-block" style={{ marginTop: '15px' }}>Gửi Yêu Cầu</button>
+              </form>
+
+              {/* Bên phải: Preview Thời khóa biểu */}
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h4 style={{ marginBottom: '15px', color: '#14b8a6', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={18} /> Preview Lịch Học Dự Kiến
+                </h4>
+                <div className="calendar-grid" style={{ marginBottom: '10px' }}>
+                  <div className="calendar-header-day">T2</div>
+                  <div className="calendar-header-day">T3</div>
+                  <div className="calendar-header-day">T4</div>
+                  <div className="calendar-header-day">T5</div>
+                  <div className="calendar-header-day">T6</div>
+                  <div className="calendar-header-day">T7</div>
+                  <div className="calendar-header-day">CN</div>
+                </div>
+                
+                {/* Lưới giả định cho tuần hiện tại */}
+                <div className="calendar-grid">
+                  {Array.from({ length: 7 }).map((_, i) => {
+                    const dayVal = i + 2; // T2..CN (2..8)
+                    // Gom các ca học được chọn cho ngày này
+                    const activeSessions = sessions.filter(s => scheduleGrid[`${dayVal}-${s.value}`]);
+                    const hasActive = activeSessions.length > 0;
+                    
+                    return (
+                      <div key={`preview-day-${i}`} className={`calendar-cell ${hasActive ? 'today' : ''}`} style={{ minHeight: '80px', padding: '4px' }}>
+                        <div className="calendar-day-number" style={{ textAlign: 'center', marginBottom: '5px' }}>{['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'][i]}</div>
+                        {activeSessions.map(session => (
+                          <div key={session.value} style={{ 
+                            background: 'rgba(16, 185, 129, 0.2)', 
+                            color: '#10b981', 
+                            border: '1px solid rgba(16, 185, 129, 0.4)',
+                            fontSize: '9px',
+                            padding: '3px 4px',
+                            borderRadius: '4px',
+                            marginBottom: '4px',
+                            textAlign: 'center',
+                            fontWeight: 'bold'
+                          }}>
+                            {session.label.split(' ')[0]} <br/> <span style={{fontSize:'8px', opacity:0.8}}>(Dự kiến)</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: '20px', fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
+                  <p><strong>Hướng dẫn:</strong></p>
+                  <ul style={{ paddingLeft: '20px', marginTop: '5px' }}>
+                    <li>Tick chọn các buổi học mong muốn ở form bên trái.</li>
+                    <li>Thời khóa biểu mô phỏng bên phải sẽ tự động hiển thị <strong style={{ color: '#10b981' }}>màu xanh</strong>.</li>
+                    <li>Giúp bạn dễ dàng hình dung lịch học thực tế sau khi gia sư nhận lớp.</li>
+                  </ul>
                 </div>
               </div>
-              <div className="form-group">
-                <label>Khu vực học / Nơi ở *</label>
-                <select name="diachi" required>
-                  {['Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8', 'Quận 10', 'Quận 11', 'Quận 12', 'Quận Bình Tân', 'Quận Bình Thạnh', 'Quận Gò Vấp', 'Quận Phú Nhuận', 'Quận Tân Bình', 'Quận Tân Phú', 'TP Thủ Đức', 'Huyện Bình Chánh', 'Khác'].map(kv => (
-                    <option key={kv} value={kv}>{kv}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Ghi chú thêm</label>
-                <textarea name="ghichu" placeholder="Các thông tin lưu ý khác..." rows="2" style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}></textarea>
-              </div>
-              <button type="submit" className="btn btn-teal btn-block" style={{ marginTop: '15px' }}>Gửi Yêu Cầu</button>
-            </form>
+            </div>
           </div>
         </div>
       )}
