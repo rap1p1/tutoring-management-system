@@ -139,6 +139,40 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Lấy danh sách gia sư công khai (cho khách chưa đăng nhập)
+router.get('/public', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        mags, hoten, ngaysinh, gioitinh, trinhdohocvan, chuyennganh, 
+        kinhnghiem, khuvuc, hocphimongmuon, anhdaidien
+      FROM giasu 
+      WHERE trangthaihoso = 'DaDuyet'
+      ORDER BY mags DESC
+    `;
+    const result = await pool(req).query(query);
+    
+    // Masking/Formatting for public view
+    const publicTutors = result.rows.map(gs => {
+      let age = null;
+      if (gs.ngaysinh) {
+        const birthYear = new Date(gs.ngaysinh).getFullYear();
+        const currentYear = new Date().getFullYear();
+        age = currentYear - birthYear;
+      }
+      return {
+        ...gs,
+        ngaysinh: undefined, // Xóa ngày sinh chi tiết
+        tuoi: age // Chỉ trả về tuổi
+      };
+    });
+
+    res.json({ success: true, data: publicTutors });
+  } catch (e) { 
+    res.json({ success: false, message: e.message }); 
+  }
+});
+
 // Lấy thông tin hồ sơ của chính gia sư đang đăng nhập
 router.get('/me', async (req, res) => {
   if (!auth(req)) return res.json({ success: false, message: 'Chưa đăng nhập' });
