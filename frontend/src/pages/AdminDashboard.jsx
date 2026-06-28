@@ -1,4 +1,13 @@
 import React, { useState, useEffect } from 'react';
+const TutorsTab = React.lazy(() => import('./admin/tabs/TutorsTab'));
+const AllTutorsTab = React.lazy(() => import('./admin/tabs/AllTutorsTab'));
+const AllStudentsTab = React.lazy(() => import('./admin/tabs/AllStudentsTab'));
+const RequestsTab = React.lazy(() => import('./admin/tabs/RequestsTab'));
+const ClassesTab = React.lazy(() => import('./admin/tabs/ClassesTab'));
+const FinancesTab = React.lazy(() => import('./admin/tabs/FinancesTab'));
+const SupportTab = React.lazy(() => import('./admin/tabs/SupportTab'));
+const AccountsTab = React.lazy(() => import('./admin/tabs/AccountsTab'));
+const SettingsTab = React.lazy(() => import('./admin/tabs/SettingsTab'));
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, UserCheck, ClipboardList, DollarSign, LogOut, Check, X, PlusCircle, CreditCard, Download, Users, GraduationCap, MessageSquare, Shield, Settings } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -587,11 +596,93 @@ function AdminDashboard() {
     exportToExcel(exportData, 'BaoCaoTaiChinh_HocPhi');
   };
 
+  const handleChangePassword = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Đổi mật khẩu',
+      html: `
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-old" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu hiện tại">
+          <span id="toggle-old" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-new" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu mới (từ 6 ký tự)">
+          <span id="toggle-new" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-confirm" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Xác nhận mật khẩu mới">
+          <span id="toggle-confirm" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Đổi mật khẩu',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff',
+      didOpen: () => {
+        const toggleVisibility = (inputId, iconId) => {
+          const input = document.getElementById(inputId);
+          const icon = document.getElementById(iconId);
+          icon.addEventListener('click', () => {
+            if (input.type === 'password') {
+              input.type = 'text';
+              icon.innerText = '🙈';
+            } else {
+              input.type = 'password';
+              icon.innerText = '👁️';
+            }
+          });
+        };
+        toggleVisibility('swal-input-old', 'toggle-old');
+        toggleVisibility('swal-input-new', 'toggle-new');
+        toggleVisibility('swal-input-confirm', 'toggle-confirm');
+      },
+      preConfirm: () => {
+        const oldPass = document.getElementById('swal-input-old').value;
+        const newPass = document.getElementById('swal-input-new').value;
+        const confirmPass = document.getElementById('swal-input-confirm').value;
+        if (!oldPass || !newPass || !confirmPass) {
+          Swal.showValidationMessage('Vui lòng nhập đầy đủ thông tin');
+          return false;
+        }
+        if (newPass.length < 6) {
+          Swal.showValidationMessage('Mật khẩu mới phải từ 6 ký tự');
+          return false;
+        }
+        if (newPass !== confirmPass) {
+          Swal.showValidationMessage('Xác nhận mật khẩu không khớp');
+          return false;
+        }
+        return { currentPassword: oldPass, newPassword: newPass };
+      }
+    });
+
+    if (formValues) {
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formValues)
+        });
+        const json = await res.json();
+        if (json.success) {
+          Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        } else {
+          Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      } catch (e) {
+        Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    }
+  };
+
   if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Đang tải...</div>;
 
   const pendingTutorsCount = pendingTutors.filter(t => t.trangthai === 'ChoDuyet').length;
   const pendingReqsCount = requests.filter(r => r.trangthai === 'ChoGhep').length;
-  const pendingSupportCount = supportRequests.filter(r => r.trangthai === 'ChoXuLy').length + absences.filter(a => ['HVXinNghi', 'GSXinNghi'].includes(a.trangthai)).length;
+  const pendingSupportCount = currentUser && currentUser.vaitro === 'NVQL' 
+    ? supportRequests.filter(r => r.trangthai === 'ChoXuLy').length + absences.filter(a => ['HVXinNghi', 'GSXinNghi'].includes(a.trangthai)).length 
+    : 0;
 
   const renderPagination = (totalItems) => {
     const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -605,13 +696,103 @@ function AdminDashboard() {
     );
   };
 
-  const renderSearchBox = (placeholder) => (
-    <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'flex-end' }}>
+  const renderSearchBox = (placeholder, extraFilterElement = null) => (
+    <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+      {extraFilterElement}
       <input type="text" className="form-control" placeholder={placeholder} value={filterText}
         onChange={(e) => { setFilterText(e.target.value); setCurrentPage(1); }}
         style={{ maxWidth: '300px' }} />
     </div>
   );
+
+  const propsObj = {
+    openProfileModal,
+    itemsPerPage,
+    renderPagination,
+    renderSearchBox,
+    activeTab,
+    setActiveTab,
+    globalError,
+    setGlobalError,
+    globalSuccess,
+    setGlobalSuccess,
+    loading,
+    setLoading,
+    filterText,
+    setFilterText,
+    currentPage,
+    setCurrentPage,
+    profileModal,
+    setProfileModal,
+    loadingProfile,
+    setLoadingProfile,
+    stats,
+    setStats,
+    pendingTutors,
+    setPendingTutors,
+    requests,
+    setRequests,
+    classes,
+    setClasses,
+    tuitions,
+    setTuitions,
+    commissions,
+    setCommissions,
+    supportRequests,
+    setSupportRequests,
+    absences,
+    setAbsences,
+    revenueData,
+    setRevenueData,
+    accounts,
+    setAccounts,
+    profile,
+    setProfile,
+    currentUser,
+    setCurrentUser,
+    defaultTyleHH,
+    setDefaultTyleHH,
+    defaultHocPhis,
+    setDefaultHocPhis,
+    allTutors,
+    setAllTutors,
+    allStudents,
+    setAllStudents,
+    showClassDetailModal,
+    setShowClassDetailModal,
+    classDetail,
+    setClassDetail,
+    loadingDetail,
+    setLoadingDetail,
+    showClassModal,
+    setShowClassModal,
+    showCreateClassModal,
+    setShowCreateClassModal,
+    showCreateInvoiceModal,
+    setShowCreateInvoiceModal,
+    showCreateCommissionModal,
+    setShowCreateCommissionModal,
+    selectedRequest,
+    setSelectedRequest,
+    handleTabChange,
+    fetchData,
+    handleApproveTutor,
+    handleOpenClassModal,
+    formatLichHoc,
+    handleCreateClass,
+    handleConfirmTuition,
+    handleConfirmCommission,
+    handleResolveSupport,
+    handleDuyetNghi,
+    handleEndClass,
+    handleToggleLock,
+    handleToggle2FA,
+    handleOpenClassDetail,
+    handleChangeCommission,
+    exportToExcel,
+    exportClasses,
+    exportFinances
+  };
 
   return (
     <div className="view-section" style={{ display: 'block' }}>
@@ -626,12 +807,21 @@ function AdminDashboard() {
         <div className="glass-card mb-4" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Thông Tin Cá Nhân Nhân Viên</h3>
-            <button 
-              className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
-              onClick={handleToggle2FA}
-            >
-              {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                className="btn btn-sm" 
+                style={{ backgroundColor: '#475569', color: '#fff' }}
+                onClick={handleChangePassword}
+              >
+                Đổi mật khẩu
+              </button>
+              <button 
+                className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
+                onClick={handleToggle2FA}
+              >
+                {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
+              </button>
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
             <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Nhân Viên (ID)</strong> {profile.manv ? 'NV' + profile.manv.toString().padStart(6, '0') : ''}</div>
@@ -696,7 +886,7 @@ function AdminDashboard() {
           </div>
         )}
 
-        {currentUser && currentUser.vaitro === 'BGD' && (
+        {currentUser && (currentUser.vaitro === 'BGD' || currentUser.vaitro === 'SA') && (
           <div className={`stats-card${activeTab === 'settings' ? ' active-card' : ''}`} onClick={() => handleTabChange('settings')} style={{ cursor: 'pointer', border: activeTab === 'settings' ? '2px solid #94a3b8' : '1px solid rgba(255,255,255,0.05)' }}>
             <div className="stats-icon" style={{ color: '#94a3b8' }}><Settings size={24} /></div>
             <div className="stats-info"><span className="stats-label">Cấu Hình Hệ Thống</span><span className="stats-value">Cài đặt</span></div>
@@ -707,524 +897,33 @@ function AdminDashboard() {
       {/* Tab Content */}
       <div className="glass-card">
         <div className="card-body">
+          <React.Suspense fallback={<div style={{ padding: '50px', textAlign: 'center', color: '#94a3b8' }}>Đang tải giao diện...</div>}>
           {/* TUTORS TAB */}
-          {activeTab === 'tutors' && (
-            <div className="table-responsive">
-              <table className="table">
-                <thead>
-                  <tr><th>Gia sư</th><th>Chuyên ngành</th><th>CCCD/SĐT</th><th>Minh chứng</th><th>Học phí mong muốn</th><th>Khu vực dạy</th><th>Hành động</th></tr>
-                </thead>
-                <tbody>
-                  {pendingTutors.length === 0 ? (
-                    <tr><td colSpan="7" style={{ textAlign: 'center' }}>Không có hồ sơ chờ duyệt</td></tr>
-                  ) : pendingTutors.map(t => (
-                    <tr key={t.mags}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          {t.anhdaidien ? (
-                            <img src={t.anhdaidien} alt="avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-primary)' }} />
-                          ) : (
-                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#94a3b8' }}>N/A</div>
-                          )}
-                          <div><strong>{t.hoten}</strong><br/><span style={{ fontSize: '12px', color: '#94a3b8' }}>{t.gioitinh} - {new Date(t.ngaysinh).toLocaleDateString('vi-VN')}</span></div>
-                        </div>
-                      </td>
-                      <td>{t.trinhdo || t.trinhdohocvan}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{t.chuyennganh}</span></td>
-                      <td>{t.cccd}<br/>{t.sdt}</td>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
-                          {t.anhcccd ? (<a href={t.anhcccd} target="_blank" rel="noreferrer" style={{ color: 'var(--color-teal)', textDecoration: 'underline' }}>CCCD</a>) : (<span style={{ color: '#ef4444' }}>Không có CCCD</span>)}
-                          {t.anhbangcap && (<a href={t.anhbangcap} target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>Bằng cấp</a>)}
-                          {t.anhthesinhvien && (<a href={t.anhthesinhvien} target="_blank" rel="noreferrer" style={{ color: 'var(--color-info)', textDecoration: 'underline' }}>Thẻ SV</a>)}
-                        </div>
-                      </td>
-                      <td>{parseInt(t.hocphimongmuon).toLocaleString()}đ</td>
-                      <td>{t.khuvucday || t.khuvuc}</td>
-                      <td>
-                        {currentUser && currentUser.vaitro !== 'BGD' && (
-                          <>
-                            <button className="btn btn-xs btn-teal" onClick={() => handleApproveTutor(t.mags, 'DaDuyet')} style={{marginRight:'5px'}}><Check size={14}/></button>
-                            <button className="btn btn-xs btn-secondary" onClick={() => handleApproveTutor(t.mags, 'TuChoi')}><X size={14}/></button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {activeTab === 'tutors' && <TutorsTab propsObj={propsObj} />}
 
           {/* REQUESTS TAB */}
-          {activeTab === 'requests' && (
-            <div className="table-responsive">
-              <table className="table">
-                <thead>
-                  <tr><th>Học viên</th><th>Môn học</th><th>Cấp lớp</th><th>Số buổi đã học / Lịch học</th><th>Trạng thái</th><th>Hành động</th></tr>
-                </thead>
-                <tbody>
-                  {requests.length === 0 ? (
-                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có yêu cầu nào</td></tr>
-                  ) : requests.map(r => (
-                    <tr key={r.mayc}>
-                      <td><strong>{r.tenhocvien}</strong><br/>{r.sdthocvien}</td>
-                      <td>{r.tenmh}</td>
-                      <td>{r.caplop}</td>
-                      <td>
-                        <strong>Đã học: {r.songayhoc} buổi</strong><br/>
-                        <span style={{fontSize:'12px',color:'#94a3b8'}}>{formatLichHoc(r.lichhoctrongtuan)}</span>
-                      </td>
-                      <td>
-                        <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : 'status-pending'}`}>
-                          {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : 'Đã ghép'}
-                        </span>
-                      </td>
-                      <td>
-                        {r.trangthai === 'ChoGhep' && currentUser && currentUser.vaitro !== 'BGD' && (
-                          <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassModal(r)}>
-                            Tạo Lớp & Ghép GS
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {activeTab === 'requests' && <RequestsTab propsObj={propsObj} />}
 
           {/* CLASSES TAB */}
-          {activeTab === 'classes' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h3 style={{ margin: 0 }}>Quản Lý Danh Sách Lớp Học</h3>
-                <button className="btn btn-secondary" onClick={exportClasses} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Download size={16} /> Xuất Excel Lớp Học
-                </button>
-              </div>
-              <div className="table-responsive">
-                <table className="table">
-                <thead>
-                  <tr><th>Mã Lớp</th><th>Môn/Lớp</th><th>Học viên</th><th>Gia sư</th><th>Học phí/buổi</th><th>Trạng thái</th><th>Hành động</th></tr>
-                </thead>
-                <tbody>
-                  {classes.length === 0 ? (
-                    <tr><td colSpan="7" style={{ textAlign: 'center' }}>Chưa có lớp nào</td></tr>
-                  ) : classes.map(c => (
-                    <tr key={c.malop}>
-                      <td>{c.malop}</td>
-                      <td>{c.tenmh}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{c.caplop}</span></td>
-                      <td>{c.tenhocvien}</td>
-                      <td>{c.tengiasu || 'Chưa phân công'}</td>
-                      <td>{c.hocphimoibuoi ? parseInt(c.hocphimoibuoi).toLocaleString() + 'đ' : ''}</td>
-                      <td>
-                        <span className={`status-badge ${c.trangthai === 'DangDay' ? 'status-active' : (c.trangthai === 'KetThuc' ? 'status-disabled' : 'status-pending')}`}>
-                          {c.trangthai}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassDetail(c.malop)} style={{marginRight:'5px'}}>Chi tiết</button>
-                        {c.trangthai !== 'KetThuc' && c.trangthai !== 'Huy' && currentUser && currentUser.vaitro !== 'BGD' && (
-                          <button className="btn btn-xs btn-rose" onClick={() => handleEndClass(c.malop)}>Kết thúc</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            </div>
-          )}
+          {activeTab === 'classes' && <ClassesTab propsObj={propsObj} />}
 
           {/* FINANCES TAB */}
-          {activeTab === 'finances' && (
-            <div className="dashboard-grid" style={{ gridTemplateColumns: '1fr', gap: '20px' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3>Khoản Thu Học Phí (Học Viên)</h3>
-                  <div>
-                    {currentUser && currentUser.vaitro !== 'BGD' && (
-                      <button className="btn btn-primary" onClick={() => setShowCreateInvoiceModal(true)} style={{ marginRight: '10px' }}>+ Tạo Y/C Học Phí</button>
-                    )}
-                    <button className="btn btn-secondary" onClick={exportFinances} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                      <Download size={16} /> Xuất Excel
-                    </button>
-                  </div>
-                </div>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>Học viên</th><th>Lớp / Môn</th><th>Số tiền</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                    <tbody>
-                      {tuitions.length === 0 ? (
-                        <tr><td colSpan="5" style={{ textAlign: 'center' }}>Không có dữ liệu học phí</td></tr>
-                      ) : tuitions.map(t => (
-                        <tr key={t.mahp}>
-                          <td><strong>{t.tenhocvien}</strong></td>
-                          <td>Lớp {t.malop}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{t.tenmh}</span></td>
-                          <td>{parseInt(t.tonghocphi).toLocaleString()}đ</td>
-                          <td>
-                            <span className={`status-badge ${t.trangthai === 'DaNop' ? 'status-active' : (t.trangthai === 'ChoXacNhan' ? 'status-pending' : 'status-disabled')}`}>
-                              {t.trangthai === 'DaNop' ? 'Đã nộp' : (t.trangthai === 'ChoXacNhan' ? 'Chờ xác nhận' : 'Chưa nộp')}
-                            </span>
-                          </td>
-                          <td>{t.trangthai !== 'DaNop' && currentUser && currentUser.vaitro !== 'BGD' && (<button className="btn btn-xs btn-teal" onClick={() => handleConfirmTuition(t.mahp)}>Duyệt Nộp</button>)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3>Thanh Toán Hoa Hồng (Gia Sư)</h3>
-                  <div>
-                    {currentUser && currentUser.vaitro !== 'BGD' && (
-                      <button className="btn btn-primary" onClick={() => setShowCreateCommissionModal(true)}>+ Tạo Y/C Hoa Hồng</button>
-                    )}
-                  </div>
-                </div>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>Gia sư</th><th>Lớp / Môn</th><th>Hoa hồng</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                    <tbody>
-                      {commissions.length === 0 ? (
-                        <tr><td colSpan="5" style={{ textAlign: 'center' }}>Không có dữ liệu hoa hồng</td></tr>
-                      ) : commissions.map(c => (
-                        <tr key={c.mahh}>
-                          <td><strong>{c.tengiasu}</strong></td>
-                          <td>Lớp {c.malop}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{c.tenmh}</span></td>
-                          <td>{parseInt(c.tonghoahong).toLocaleString()}đ</td>
-                          <td><span className={`status-badge ${c.trangthai === 'DaTT' ? 'status-active' : 'status-pending'}`}>{c.trangthai === 'DaTT' ? 'Đã TT' : 'Chưa TT'}</span></td>
-                          <td>{c.trangthai !== 'DaTT' && currentUser && currentUser.vaitro !== 'BGD' && (<button className="btn btn-xs btn-primary" onClick={() => handleConfirmCommission(c.mahh)}>Duyệt TT</button>)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === 'finances' && <FinancesTab propsObj={propsObj} />}
 
           {/* SUPPORT TAB */}
-          {activeTab === 'support' && (
-            <div className="dashboard-grid" style={{ gridTemplateColumns: '1fr', gap: '20px' }}>
-              <div>
-                <h3 style={{ marginBottom: '15px' }}>Yêu Cầu Đổi/Nghỉ Lớp</h3>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>Ngày yêu cầu</th><th>Lớp / Môn</th><th>Người gửi</th><th>Lý do</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                    <tbody>
-                      {supportRequests.length === 0 ? (
-                        <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có yêu cầu nào</td></tr>
-                      ) : supportRequests.map(s => (
-                        <tr key={s.maycdg}>
-                          <td>{new Date(s.ngayyeucau).toLocaleString('vi-VN')}</td>
-                          <td>Lớp {s.malop}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{s.tenmh}</span></td>
-                          <td><strong>HV:</strong> {s.tenhocvien}<br/><strong>GS:</strong> {s.tengiasu || 'Chưa có'}</td>
-                          <td style={{ maxWidth: '250px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>) : (s.lydo)}</td>
-                          <td><span className={`status-badge ${s.trangthai === 'DaXuLy' ? 'status-active' : 'status-pending'}`}>{s.trangthai === 'DaXuLy' ? 'Đã xử lý' : 'Chờ xử lý'}</span></td>
-                          <td>{s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro !== 'BGD' && (<button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg)}>Đánh dấu xử lý</button>)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div>
-                <h3 style={{ marginBottom: '15px' }}>Lịch Sử Báo Vắng 1 Buổi (Học Viên & Gia Sư)</h3>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>Người báo vắng</th><th>Lớp / Môn</th><th>Ngày nghỉ / Ca</th><th>Lý do chi tiết</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                    <tbody>
-                      {absences.length === 0 ? (
-                        <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có lịch sử báo vắng</td></tr>
-                      ) : absences.map(a => {
-                        const isPending = a.trangthai === 'HVXinNghi' || a.trangthai === 'GSXinNghi';
-                        const isHV = a.trangthai === 'HVVangCoPhep' || a.trangthai === 'HVXinNghi';
-                        
-                        let statusClass = 'status-disabled';
-                        let statusText = 'Đã hủy';
-                        if (a.trangthai === 'HVVangCoPhep') {
-                          statusClass = 'status-active';
-                          statusText = 'HV vắng';
-                        } else if (a.trangthai === 'GSNghi') {
-                          statusClass = 'status-active';
-                          statusText = 'GS nghỉ';
-                        } else if (isPending) {
-                          statusClass = 'status-pending';
-                          statusText = 'Chờ duyệt';
-                        }
-
-                        return (
-                          <tr key={a.mabuoi}>
-                            <td>
-                              {isHV ? (
-                                <><span className="status-badge" style={{backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444'}}>Học viên</span><br/><strong>{a.tenhocvien}</strong></>
-                              ) : (
-                                <><span className="status-badge" style={{backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b'}}>Gia sư</span><br/><strong>{a.tengiasu}</strong></>
-                              )}
-                            </td>
-                            <td>Lớp {a.malop}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{a.tenmh}</span></td>
-                            <td>
-                              <strong>{new Date(a.ngayday).toLocaleDateString('vi-VN')}</strong><br/>
-                              <span style={{fontSize:'12px',color:'#94a3b8'}}>Ca: {a.cahoc === 'Sang' ? 'Sáng' : a.cahoc === 'Chieu' ? 'Chiều' : 'Tối'}</span>
-                            </td>
-                            <td style={{ maxWidth: '350px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{a.noidung && a.noidung.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{a.noidung}</span>) : (a.noidung)}</td>
-                            <td>
-                              <span className={`status-badge ${statusClass}`}>{statusText}</span>
-                            </td>
-                            <td>
-                              {isPending && currentUser && currentUser.vaitro !== 'BGD' && (
-                                <div style={{ display: 'flex', gap: '5px' }}>
-                                  <button className="btn btn-xs btn-teal" onClick={() => handleDuyetNghi(a.mabuoi, 'approve')}>Duyệt</button>
-                                  <button className="btn btn-xs btn-rose" onClick={() => handleDuyetNghi(a.mabuoi, 'reject')}>Từ chối</button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === 'support' && <SupportTab propsObj={propsObj} />}
 
           {/* ACCOUNTS TAB */}
-          {activeTab === 'accounts' && (
-            <div className="table-responsive">
-              <table className="table">
-                <thead><tr><th>Họ Tên</th><th>Tên Đăng Nhập</th><th>Email</th><th>Vai Trò</th><th>Trạng Thái</th><th>Hành Động</th></tr></thead>
-                <tbody>
-                  {accounts.length === 0 ? (
-                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có tài khoản nào</td></tr>
-                  ) : accounts.map(acc => (
-                    <tr key={acc.matk}>
-                      <td><strong>{acc.hoten || 'Chưa cập nhật'}</strong></td>
-                      <td>{acc.tendangnhap}</td>
-                      <td>{acc.email || 'Không có'}</td>
-                      <td>
-                        <span className="status-badge" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff' }}>
-                          {acc.vaitro === 'HV' ? 'Học viên' : acc.vaitro === 'GS' ? 'Gia sư' : acc.vaitro === 'NVQL' ? 'Nhân viên QL' : acc.vaitro === 'BGD' ? 'Giám đốc' : acc.vaitro === 'SA' ? 'System Admin' : acc.vaitro}
-                        </span>
-                      </td>
-                      <td><span className={`status-badge ${acc.trangthai === 'HoatDong' ? 'status-active' : 'status-disabled'}`}>{acc.trangthai === 'HoatDong' ? 'Hoạt động' : 'Đã khóa'}</span></td>
-                      <td>
-                        {acc.matk === currentUser?.matk ? (
-                          <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>Bản thân</span>
-                        ) : acc.vaitro === 'BGD' && currentUser?.vaitro !== 'BGD' ? (
-                          <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>Không được phép</span>
-                        ) : (
-                          <button className={`btn btn-xs ${acc.trangthai === 'Khoa' ? 'btn-teal' : 'btn-rose'}`} onClick={() => handleToggleLock(acc.matk, acc.trangthai)}>{acc.trangthai === 'Khoa' ? 'Mở khóa' : 'Khóa'}</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {activeTab === 'accounts' && <AccountsTab propsObj={propsObj} />}
           {/* ALL STUDENTS TAB */}
-          {activeTab === 'all_students' && (() => {
-            const filteredData = allStudents.filter(s =>
-              (s.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (s.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (s.email || '').toLowerCase().includes(filterText.toLowerCase())
-            );
-            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-            return (
-              <div className="table-responsive">
-                {renderSearchBox("Tìm theo tên, SĐT, email...")}
-                <table className="table">
-                  <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Email</th><th>Địa chỉ</th><th>Cấp học</th><th></th></tr></thead>
-                  <tbody>
-                    {paginatedData.length === 0 ? (
-                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Không có dữ liệu</td></tr>
-                    ) : (
-                      paginatedData.map(s => (
-                        <tr key={s.mahv}>
-                          <td><strong>{s.hoten}</strong></td>
-                          <td>{s.sdt}</td>
-                          <td>{s.email || 'Chưa có'}</td>
-                          <td>{s.diachi || 'Chưa có'}</td>
-                          <td>{s.caphoc || 'Chưa có'}</td>
-                          <td><button className="btn btn-xs btn-teal" onClick={() => openProfileModal('student', s.mahv)}>Chi tiết</button></td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                {renderPagination(filteredData.length)}
-              </div>
-            );
-          })()}
+          {activeTab === 'all_students' && <AllStudentsTab propsObj={propsObj} />}
 
           {/* ALL TUTORS TAB */}
-          {activeTab === 'all_tutors' && (() => {
-            const filteredData = allTutors.filter(t =>
-              (t.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (t.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (t.chuyennganh || '').toLowerCase().includes(filterText.toLowerCase())
-            );
-            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-            return (
-              <div className="table-responsive">
-                {renderSearchBox("Tìm theo tên, SĐT, chuyên ngành...")}
-                <table className="table">
-                  <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Chuyên ngành</th><th>Học phí (đ/buổi)</th><th>Khu vực</th><th>Trạng thái</th><th></th></tr></thead>
-                  <tbody>
-                    {paginatedData.length === 0 ? (
-                      <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Không có dữ liệu</td></tr>
-                    ) : (
-                      paginatedData.map(t => (
-                        <tr key={t.mags}>
-                          <td><strong>{t.hoten}</strong></td>
-                          <td>{t.sdt}</td>
-                          <td>{t.chuyennganh}</td>
-                          <td>{parseInt(t.hocphimongmuon || 0).toLocaleString()}đ</td>
-                          <td>{t.khuvucday || t.khuvuc}</td>
-                          <td><span className={`status-badge ${t.trangthai === 'DaDuyet' ? 'status-active' : 'status-pending'}`}>{t.trangthai}</span></td>
-                          <td><button className="btn btn-xs btn-indigo" onClick={() => openProfileModal('tutor', t.mags)}>Chi tiết</button></td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                {renderPagination(filteredData.length)}
-              </div>
-            );
-          })()}
+          {activeTab === 'all_tutors' && <AllTutorsTab propsObj={propsObj} />}
 
           {/* SETTINGS TAB */}
-          {activeTab === 'settings' && currentUser?.vaitro === 'BGD' && (
-            <div className="glass-card" style={{ padding: '20px', maxWidth: '500px' }}>
-              <h3 style={{ marginBottom: '15px' }}>Cài Đặt Hệ Thống</h3>
-              <div className="form-group">
-                <label>Tỷ lệ hoa hồng mặc định (%)</label>
-                <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
-                  <input 
-                    type="number" 
-                    id="sys_default_tylehh"
-                    defaultValue={defaultTyleHH}
-                    key={defaultTyleHH}
-                    min="0"
-                    max="100"
-                    style={{ flex: 1 }}
-                  />
-                  <button 
-                    className="btn btn-teal"
-                    onClick={async () => {
-                      const val = document.getElementById('sys_default_tylehh').value;
-                      if (!val || isNaN(parseFloat(val)) || parseFloat(val) < 0 || parseFloat(val) > 100) {
-                        showMsg('error', 'Tỷ lệ hoa hồng không hợp lệ (phải từ 0 đến 100).');
-                        return;
-                      }
-                      try {
-                        const res = await fetch('/api/nhanvien/config/tylehh', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ tylehh: val })
-                        });
-                        const json = await res.json();
-                        if (json.success) {
-                          showMsg('success', json.message);
-                          setDefaultTyleHH(parseFloat(val));
-                        } else {
-                          showMsg('error', json.message);
-                        }
-                      } catch(e) {
-                        showMsg('error', 'Lỗi kết nối.');
-                      }
-                    }}
-                  >
-                    Lưu
-                  </button>
-                </div>
-                <small style={{ color: '#94a3b8', display: 'block', marginTop: '10px' }}>
-                  Tỷ lệ này sẽ tự động áp dụng khi tạo các lớp học mới (nhân viên quản lý không thể tự ý sửa đổi).
-                </small>
-              </div>
-
-              <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '20px 0' }} />
-              
-              <h3 style={{ marginBottom: '15px' }}>Học Phí Mặc Định Theo Cấp Lớp (VND/buổi)</h3>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }} key={JSON.stringify(defaultHocPhis)}>
-                <div className="form-group">
-                  <label>Cấp 1</label>
-                  <input type="number" id="fee_cap1" defaultValue={defaultHocPhis.HocPhi_Cap1} step="10000" />
-                </div>
-                <div className="form-group">
-                  <label>Cấp 2</label>
-                  <input type="number" id="fee_cap2" defaultValue={defaultHocPhis.HocPhi_Cap2} step="10000" />
-                </div>
-                <div className="form-group">
-                  <label>Cấp 3</label>
-                  <input type="number" id="fee_cap3" defaultValue={defaultHocPhis.HocPhi_Cap3} step="10000" />
-                </div>
-                <div className="form-group">
-                  <label>Luyện thi Đại học</label>
-                  <input type="number" id="fee_luyenthidh" defaultValue={defaultHocPhis.HocPhi_LuyenThiDH} step="10000" />
-                </div>
-                <div className="form-group">
-                  <label>Tiếng Anh Giao tiếp</label>
-                  <input type="number" id="fee_tienganhgt" defaultValue={defaultHocPhis.HocPhi_TiengAnhGT} step="10000" />
-                </div>
-                <div className="form-group">
-                  <label>Chứng chỉ Quốc tế</label>
-                  <input type="number" id="fee_chungchiqt" defaultValue={defaultHocPhis.HocPhi_ChungChiQT} step="10000" />
-                </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Khác</label>
-                  <input type="number" id="fee_khac" defaultValue={defaultHocPhis.HocPhi_Khac} step="10000" />
-                </div>
-              </div>
-              
-              <button 
-                className="btn btn-teal btn-block" 
-                style={{ marginTop: '15px' }}
-                onClick={async () => {
-                  const cap1 = document.getElementById('fee_cap1').value;
-                  const cap2 = document.getElementById('fee_cap2').value;
-                  const cap3 = document.getElementById('fee_cap3').value;
-                  const luyenthidh = document.getElementById('fee_luyenthidh').value;
-                  const tienganhgt = document.getElementById('fee_tienganhgt').value;
-                  const chungchiqt = document.getElementById('fee_chungchiqt').value;
-                  const khac = document.getElementById('fee_khac').value;
-
-                  try {
-                    const res = await fetch('/api/nhanvien/config/hocphi', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ cap1, cap2, cap3, luyenthidh, tienganhgt, chungchiqt, khac })
-                    });
-                    const json = await res.json();
-                    if (json.success) {
-                      showMsg('success', json.message);
-                      setDefaultHocPhis({
-                        HocPhi_Cap1: parseInt(cap1),
-                        HocPhi_Cap2: parseInt(cap2),
-                        HocPhi_Cap3: parseInt(cap3),
-                        HocPhi_LuyenThiDH: parseInt(luyenthidh),
-                        HocPhi_TiengAnhGT: parseInt(tienganhgt),
-                        HocPhi_ChungChiQT: parseInt(chungchiqt),
-                        HocPhi_Khac: parseInt(khac)
-                      });
-                    } else {
-                      showMsg('error', json.message);
-                    }
-                  } catch (e) {
-                    showMsg('error', 'Lỗi kết nối.');
-                  }
-                }}
-              >
-                Lưu học phí mặc định
-              </button>
-            </div>
-          )}
+          {activeTab === 'settings' && <SettingsTab propsObj={propsObj} />}
+          </React.Suspense>
         </div>
       </div>
 
@@ -1332,6 +1031,7 @@ function AdminDashboard() {
       {/* Finance Modals */}
       {showCreateInvoiceModal && (
         <TuitionInvoiceModal 
+          classes={classes}
           onClose={() => setShowCreateInvoiceModal(false)}
           onSuccess={() => {
             setShowCreateInvoiceModal(false);
@@ -1342,6 +1042,7 @@ function AdminDashboard() {
       
       {showCreateCommissionModal && (
         <SalaryInvoiceModal 
+          classes={classes}
           onClose={() => setShowCreateCommissionModal(false)}
           onSuccess={() => {
             setShowCreateCommissionModal(false);
@@ -1367,7 +1068,19 @@ function AdminDashboard() {
             </div>
             
             {(() => {
-              const sortedTutors = [...allTutors].map(gs => {
+              const reqMaMH = parseInt(selectedRequest?.mamh);
+              const reqTenMH = selectedRequest?.tenmh;
+              const sortedTutors = [...allTutors].filter(gs => {
+                if (gs.trangthaihoso !== 'DaDuyet') return false;
+                if (!reqMaMH) return true; // fallback
+                
+                // Safely compare IDs regardless of string/number type
+                const hasRegistered = gs.registered_subjects && 
+                  gs.registered_subjects.some(id => parseInt(id) === reqMaMH);
+                  
+                const isMajorMatch = gs.chuyennganh === reqTenMH;
+                return hasRegistered || isMajorMatch;
+              }).map(gs => {
                 const matchCount = getMatchCount(selectedRequest?.lichhoctrongtuan, gs.lichranh);
                 return { ...gs, matchCount };
               }).sort((a, b) => b.matchCount - a.matchCount);
@@ -1451,12 +1164,12 @@ function AdminDashboard() {
                     <div><strong>Học phí:</strong> {parseInt(classDetail.info.hocphimoibuoi).toLocaleString()}đ/buổi</div>
                     <div>
                       <strong>Tỷ lệ HH GS:</strong> {classDetail.info.tylehhgiasu}%
-                      {currentUser && currentUser.vaitro === 'BGD' && (
+                      {currentUser && (currentUser.vaitro === 'BGD' || currentUser.vaitro === 'SA') && (
                         <button className="btn btn-xs btn-primary" style={{marginLeft:'8px'}} onClick={() => handleChangeCommission(classDetail.info.malop)}>Sửa</button>
                       )}
                     </div>
                     <div><strong>Ngày bắt đầu:</strong> {classDetail.info.ngaybatdau ? new Date(classDetail.info.ngaybatdau).toLocaleDateString('vi-VN') : 'N/A'}</div>
-                    <div><strong>Số buổi đã học:</strong> {classDetail.info.songayhoc !== undefined ? classDetail.info.songayhoc : 'N/A'}</div>
+                    <div><strong>Số buổi/tuần:</strong> {classDetail.info.songayhoc !== undefined ? classDetail.info.songayhoc : 'N/A'}</div>
                     <div style={{ gridColumn: 'span 2' }}><strong>Lịch học:</strong> {formatLichHoc(classDetail.info.lichhoctrongtuan)}</div>
                   </div>
                 </div>

@@ -2,8 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const path = require('path');
 const { Pool } = require('pg');
+
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,17 +22,37 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+// Security middleware
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true
+}));
+
+// Rate limiting cho auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 phút
+  max: 10,
+  message: { success: false, message: 'Quá nhiều lần thử, vui lòng chờ 15 phút.' }
+});
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Quá nhiều lần đăng ký, vui lòng chờ 15 phút.' }
+});
+
 // Middleware
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ limit: '15mb', extended: true }));
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret',
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
+
 
 // Auth middleware
 function requireAuth(req, res, next) {
@@ -42,11 +67,42 @@ function requireRole(...roles) {
   };
 }
 
+// Admin Logger Middleware
+async function adminLogger(req, res, next) {
+  res.on('finish', async () => {
+    if (req.session && req.session.user) {
+      if (req.path === '/nhanvien/logs') return; // Tránh loop log
+      if (req.method === 'GET') return; // Bỏ qua các thao tác chỉ xem dữ liệu (GET)
+      
+      const matk = req.session.user.matk;
+      const endpoint = req.originalUrl;
+      const method = req.method;
+      const ip = req.ip || req.connection.remoteAddress;
+      const hanhdong = method + ' ' + req.path;
+      const chitiet = { body: { ...req.body }, query: req.query, status: res.statusCode };
+      
+      // Mask passwords
+      if (chitiet.body.matkhau) chitiet.body.matkhau = '***';
+      if (chitiet.body.password) chitiet.body.password = '***';
+
+      try {
+        await pool.query(
+          "INSERT INTO LOG_TRUY_CAP (MaTK, Endpoint, Method, HanhDong, ChiTiet, IPAddress) VALUES ($1, $2, $3, $4, $5, $6)",
+          [matk, endpoint, method, hanhdong, JSON.stringify(chitiet), ip]
+        );
+      } catch (err) { console.error("Lỗi ghi log:", err); }
+    }
+  });
+  next();
+}
+
+app.use('/api', adminLogger);
+
 // ============================================================
 // AUTH ROUTES
 // ============================================================
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const username = (req.body.username || '').trim();
     const password = req.body.password;
@@ -106,21 +162,21 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', registerLimiter, async (req, res) => {
   try {
     const { username, password, hoten, ngaysinh, sdt, email } = req.body;
     if (!username || !password || !hoten || !ngaysinh || !sdt) return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
-    
+
     if (password.length < 6) return res.json({ success: false, message: 'Mật khẩu phải từ 6 ký tự trở lên' });
     if (!/^\d{10,11}$/.test(sdt)) return res.json({ success: false, message: 'Số điện thoại không hợp lệ' });
     if (email && !email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải có đuôi @gmail.com' });
-    
+
     const today = new Date().toISOString().split('T')[0];
     if (ngaysinh >= today) return res.json({ success: false, message: 'Ngày sinh phải nhỏ hơn ngày hiện tại' });
 
     const exists = await pool.query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (exists.rows.length > 0) return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại' });
-    
+
     const hash = await bcrypt.hash(password, 10);
     const client = await pool.connect();
     try {
@@ -173,12 +229,12 @@ app.locals.bcrypt = bcrypt;
 // ============================================================
 // ROUTES - mount separate files
 // ============================================================
-app.use('/api/monhoc',    require('./routes/monhoc'));
-app.use('/api/hocvien',   require('./routes/hocvien'));
-app.use('/api/giasu',     require('./routes/giasu'));
-app.use('/api/lop',       require('./routes/lop'));
-app.use('/api/nhanvien',  require('./routes/nhanvien'));
-app.use('/api/auth',      require('./routes/auth'));
+app.use('/api/monhoc', require('./routes/monhoc'));
+app.use('/api/hocvien', require('./routes/hocvien'));
+app.use('/api/giasu', require('./routes/giasu'));
+app.use('/api/lop', require('./routes/lop'));
+app.use('/api/nhanvien', require('./routes/nhanvien'));
+app.use('/api/auth', require('./routes/auth'));
 
 // ============================================================
 // SEED DATA (tạo tài khoản mặc định)
@@ -192,26 +248,49 @@ async function seedData() {
     try {
       await client.query('BEGIN');
       // SA
-      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin','"+hash+"','SA') RETURNING matk");
+      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin', $1, 'SA') RETURNING matk", [hash]);
       await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Quản trị viên','0900000001','SA','2024-01-01')",[sa.rows[0].matk]);
       // BGD
-      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc','"+hash+"','BGD') RETURNING matk");
+      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc', $1, 'BGD') RETURNING matk", [hash]);
       await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Giám đốc','0900000002','Giám đốc','2024-01-01')",[bgd.rows[0].matk]);
       // NVQL
-      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien','"+hash+"','NVQL') RETURNING matk");
+      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien', $1, 'NVQL') RETURNING matk", [hash]);
       await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Nhân viên QL','0900000003','NVQL','2024-01-01')",[nv.rows[0].matk]);
       // HV
-      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1','"+hash+"','HV') RETURNING matk");
+      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1', $1, 'HV') RETURNING matk", [hash]);
       await client.query("INSERT INTO hocvien(matk,hoten,sdt) VALUES($1,'Học viên Mẫu','0900000004')",[hv.rows[0].matk]);
       // GS
-      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1','"+hash+"','GS') RETURNING matk");
+      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1', $1, 'GS') RETURNING matk", [hash]);
       await client.query("INSERT INTO giasu(matk,hoten,ngaysinh,gioitinh,cccd,sdt,trinhdohocvan,chuyennganh,kinhnghiem,khuvuc,hocphimongmuon,trangthaihoso) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')",[gs.rows[0].matk]);
       await client.query('COMMIT');
       console.log('Seed data thành công. Tài khoản mặc định: admin/admin123, hocvien1/admin123, giasu1/admin123, nhanvien/admin123, giamdoc/admin123');
-    } catch(e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }
     finally { client.release(); }
-  } catch(e) { console.error('Seed check error:', e.message); }
+  } catch (e) { console.error('Seed check error:', e.message); }
 }
+
+// ============================================================
+// CRONJOB: TỰ ĐỘNG CHỐT CÔNG SAU 24H
+// ============================================================
+const cron = require('node-cron');
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('[Cron] Quét các buổi học chờ xác nhận quá 24h...');
+    const result = await pool.query(
+      `UPDATE buoiday 
+       SET trangthai = 'DaDay', 
+           noidung = COALESCE(noidung, '') || ' [Hệ thống tự động xác nhận sau 24h]'
+       WHERE trangthai = 'ChoXacNhan' 
+       AND thoigianxacnhan <= NOW() - INTERVAL '24 hours'
+       RETURNING mabuoi`
+    );
+    if (result.rowCount > 0) {
+      console.log(`[Cron] Đã tự động duyệt ${result.rowCount} buổi học.`);
+    }
+  } catch (err) {
+    console.error('[Cron] Lỗi tự động duyệt:', err.message);
+  }
+});
 
 // Start
 app.listen(PORT, async () => {

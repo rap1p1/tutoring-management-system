@@ -298,4 +298,40 @@ router.get('/config/hocphi', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
+// Học viên xác nhận buổi học
+router.post('/xacnhanbuoi', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'HV') return res.json({ success: false, message: 'Không có quyền' });
+  try {
+    const { mabuoi } = req.body;
+    if (!mabuoi) return res.json({ success: false, message: 'Thiếu thông tin' });
+
+    // Kiểm tra buổi học có thuộc lớp của học viên này không
+    const hvR = await pool(req).query('SELECT mahv FROM hocvien WHERE matk = $1', [auth(req).matk]);
+    if (!hvR.rows.length) return res.json({ success: false, message: 'Không tìm thấy học viên' });
+    const mahv = hvR.rows[0].mahv;
+
+    const buoiCheck = await pool(req).query(`
+      SELECT b.mabuoi, b.trangthai 
+      FROM buoiday b
+      JOIN lop l ON b.malop = l.malop
+      JOIN yeucauhockem yc ON l.mayc = yc.mayc
+      WHERE b.mabuoi = $1 AND yc.mahv = $2
+    `, [mabuoi, mahv]);
+
+    if (!buoiCheck.rows.length) return res.json({ success: false, message: 'Không tìm thấy buổi học' });
+    
+    if (buoiCheck.rows[0].trangthai !== 'ChoXacNhan') {
+      return res.json({ success: false, message: 'Buổi học không ở trạng thái chờ xác nhận' });
+    }
+
+    await pool(req).query(
+      "UPDATE buoiday SET trangthai = 'DaDay', thoigianxacnhan = NOW() WHERE mabuoi = $1",
+      [mabuoi]
+    );
+    res.json({ success: true, message: 'Xác nhận buổi học thành công' });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
+});
+
 module.exports = router;

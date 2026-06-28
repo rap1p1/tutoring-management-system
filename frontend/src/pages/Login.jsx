@@ -45,6 +45,18 @@ function Login() {
   const [fpError, setFpError] = useState('');
   const [fpSuccess, setFpSuccess] = useState('');
   const [fpNewPassVisible, setFpNewPassVisible] = useState(false);
+  
+  const [allSubjects, setAllSubjects] = useState([]);
+
+  // Fetch subjects for tutor registration
+  useEffect(() => {
+    fetch('/api/monhoc')
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) setAllSubjects(json.data);
+      })
+      .catch(e => console.error('Error fetching subjects:', e));
+  }, []);
 
   // === Google Sign-In ===
   const googleBtnRef = useRef(null);
@@ -804,15 +816,9 @@ function Login() {
               <div className="form-group">
                 <label>Chuyên ngành *</label>
                 <select name="chuyennganh" required>
-                  <option value="Sư phạm Toán">Sư phạm Toán</option>
-                  <option value="Sư phạm Ngữ Văn">Sư phạm Ngữ Văn</option>
-                  <option value="Sư phạm Tiếng Anh">Sư phạm Tiếng Anh</option>
-                  <option value="Sư phạm Vật lý">Sư phạm Vật lý</option>
-                  <option value="Sư phạm Hóa học">Sư phạm Hóa học</option>
-                  <option value="Sư phạm Sinh học">Sư phạm Sinh học</option>
-                  <option value="Sư phạm Tin học">Sư phạm Tin học</option>
-                  <option value="Khoa học Tự nhiên (KHTN)">Tổ hợp Khoa học Tự nhiên</option>
-                  <option value="Khoa học Xã hội (KHXH)">Tổ hợp Khoa học Xã hội</option>
+                  {allSubjects.map(s => (
+                    <option key={s.mamh} value={s.tenmh}>{s.tenmh}</option>
+                  ))}
                   <option value="Khác">Khác</option>
                 </select>
               </div>

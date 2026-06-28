@@ -180,6 +180,7 @@ CREATE TABLE LOP (
   NgayBatDau        DATE,
   NgayKetThucDuKien DATE,
   NgayKetThucThucTe DATE,
+  HanXacNhan        TIMESTAMP,
   SoGio             DECIMAL(4,1)   CHECK (SoGio > 0),
   TrangThai         VARCHAR(30)    NOT NULL DEFAULT 'ChoGhep' CHECK (TrangThai IN ('ChoGhep','DaPhanCong','DangDay','KetThuc','Huy')),
   NoiDung           VARCHAR(300),
@@ -283,3 +284,14 @@ INSERT INTO MONHOC (TenMH, CapHoc, MoTa) VALUES
 -- Ghi chú: Tài khoản admin/test được tạo khi khởi động server
 -- Xem file server.js hàm seedData()
 -- ============================================================
+ C R E A T E   T A B L E   L O G _ T R U Y _ C A P   ( 
+     M a L o g   S E R I A L   P R I M A R Y   K E Y , 
+     M a T K   I N T   N O T   N U L L   R E F E R E N C E S   T A I K H O A N ( M a T K )   O N   D E L E T E   C A S C A D E , 
+     E n d p o i n t   V A R C H A R ( 2 5 5 )   N O T   N U L L , 
+     M e t h o d   V A R C H A R ( 1 0 )   N O T   N U L L , 
+     H a n h D o n g   V A R C H A R ( 2 5 5 ) , 
+     C h i T i e t   J S O N B , 
+     I P A d d r e s s   V A R C H A R ( 5 0 ) , 
+     T h o i G i a n   T I M E S T A M P   N O T   N U L L   D E F A U L T   N O W ( ) 
+ ) ;  
+ 
