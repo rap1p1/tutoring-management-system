@@ -29,6 +29,23 @@ function StudentDashboard() {
   const [globalError, setGlobalError] = useState('');
 
   const [scheduleGrid, setScheduleGrid] = useState({});
+
+  const [requestPage, setRequestPage] = useState(1);
+  const [classPage, setClassPage] = useState(1);
+  const [tuitionPage, setTuitionPage] = useState(1);
+  const itemsPerPage = 5;
+
+  const renderPagination = (currentPage, setCurrentPage, totalItems) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    if (totalPages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '15px' }}>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>&larr;</button>
+        <span style={{ fontSize: '13px' }}>Trang {currentPage}/{totalPages}</span>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>&rarr;</button>
+      </div>
+    );
+  };
   const [defaultHocPhis, setDefaultHocPhis] = useState({
     HocPhi_Cap1: 100000,
     HocPhi_Cap2: 200000,
@@ -717,7 +734,7 @@ function StudentDashboard() {
                     {requests.length === 0 ? (
                       <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa có yêu cầu nào</td></tr>
                     ) : (
-                      requests.map(r => (
+                      requests.slice((requestPage - 1) * itemsPerPage, requestPage * itemsPerPage).map(r => (
                         <tr key={r.mayc}>
                           <td>{new Date(r.ngaydangky).toLocaleDateString()}</td>
                           <td>{r.tenmh}</td>
@@ -736,6 +753,7 @@ function StudentDashboard() {
                     )}
                   </tbody>
                 </table>
+                {renderPagination(requestPage, setRequestPage, requests.length)}
               </div>
             </div>
           </div>
@@ -759,7 +777,7 @@ function StudentDashboard() {
                     {classes.length === 0 ? (
                       <tr><td colSpan="6" style={{ textAlign: 'center' }}>Chưa có lớp nào</td></tr>
                     ) : (
-                      classes.map(c => (
+                      classes.slice((classPage - 1) * itemsPerPage, classPage * itemsPerPage).map(c => (
                         <tr key={c.malop}>
                           <td>{c.malop}</td>
                           <td>{c.tenmh}</td>
@@ -786,6 +804,7 @@ function StudentDashboard() {
                     )}
                   </tbody>
                 </table>
+                {renderPagination(classPage, setClassPage, classes.length)}
               </div>
             </div>
           </div>
@@ -798,33 +817,36 @@ function StudentDashboard() {
               {tuitions.length === 0 ? (
                 <p>Không có hóa đơn học phí nào.</p>
               ) : (
-                tuitions.map(t => (
-                  <div key={t.mahp} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <strong>{t.tenmh}</strong>
-                      <span className={t.trangthai === 'DaNop' ? 'text-teal' : (t.trangthai === 'ChoXacNhan' ? 'text-warning' : 'text-rose')}>
-                        {Number(t.tonghocphi || 0).toLocaleString()}đ
-                      </span>
+                <>
+                  {tuitions.slice((tuitionPage - 1) * itemsPerPage, tuitionPage * itemsPerPage).map(t => (
+                    <div key={t.mahp} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                        <strong>{t.tenmh}</strong>
+                        <span className={t.trangthai === 'DaNop' ? 'text-teal' : (t.trangthai === 'ChoXacNhan' ? 'text-warning' : 'text-rose')}>
+                          {Number(t.tonghocphi || 0).toLocaleString()}đ
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        {t.sobuoi || 0} buổi × {Number(t.hocphimoibuoi || 0).toLocaleString()}đ
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                        <span>
+                          Trạng thái: {t.trangthai === 'DaNop' ? 'Đã Thanh Toán' : (t.trangthai === 'ChoXacNhan' ? 'Chờ xác nhận' : 'Chưa Thanh Toán')}
+                        </span>
+                        {t.trangthai === 'ChuaNop' && (
+                          <button
+                            className="btn btn-xs btn-teal"
+                            onClick={() => handlePayTuition(t)}
+                            style={{ padding: '2px 8px', fontSize: '11px' }}
+                          >
+                            Nộp học phí
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {t.sobuoi || 0} buổi × {Number(t.hocphimoibuoi || 0).toLocaleString()}đ
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                      <span>
-                        Trạng thái: {t.trangthai === 'DaNop' ? 'Đã Thanh Toán' : (t.trangthai === 'ChoXacNhan' ? 'Chờ xác nhận' : 'Chưa Thanh Toán')}
-                      </span>
-                      {t.trangthai === 'ChuaNop' && (
-                        <button
-                          className="btn btn-xs btn-teal"
-                          onClick={() => handlePayTuition(t)}
-                          style={{ padding: '2px 8px', fontSize: '11px' }}
-                        >
-                          Nộp học phí
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  ))}
+                  {renderPagination(tuitionPage, setTuitionPage, tuitions.length)}
+                </>
               )}
             </div>
           </div>

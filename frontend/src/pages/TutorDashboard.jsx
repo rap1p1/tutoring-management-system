@@ -22,6 +22,22 @@ function TutorDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedDistricts, setSelectedDistricts] = useState([]);
 
+  const [classPage, setClassPage] = useState(1);
+  const [commissionPage, setCommissionPage] = useState(1);
+  const itemsPerPage = 5;
+
+  const renderPagination = (currentPage, setCurrentPage, totalItems) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    if (totalPages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '15px' }}>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>&larr;</button>
+        <span style={{ fontSize: '13px' }}>Trang {currentPage}/{totalPages}</span>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>&rarr;</button>
+      </div>
+    );
+  };
+
   const handleDistrictChange = (e) => {
     const value = e.target.value;
     if (e.target.checked) {
@@ -235,9 +251,12 @@ function TutorDashboard() {
       const json = await res.json();
       if (json.success) {
         setClassSessions(json.data || []);
+      } else {
+        setGlobalError(`Lỗi tải lịch dạy: ${json.message}`);
       }
     } catch (e) {
       console.error(e);
+      setGlobalError(`Lỗi kết nối khi tải lịch dạy: ${e.message}`);
     } finally {
       setLoadingSessions(false);
     }
@@ -720,7 +739,7 @@ function TutorDashboard() {
                     {classes.length === 0 ? (
                       <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa nhận lớp nào</td></tr>
                     ) : (
-                      classes.map(c => (
+                      classes.slice((classPage - 1) * itemsPerPage, classPage * itemsPerPage).map(c => (
                         <tr key={c.malop}>
                           <td>{c.malop}</td>
                           <td>{c.tenmh} ({c.caplop})</td>
@@ -762,6 +781,7 @@ function TutorDashboard() {
                     )}
                   </tbody>
                 </table>
+                {renderPagination(classPage, setClassPage, classes.length)}
               </div>
             </div>
           </div>
@@ -820,19 +840,22 @@ function TutorDashboard() {
               {commissions.length === 0 ? (
                 <p>Chưa có khoản hoa hồng nào.</p>
               ) : (
-                commissions.map(c => (
-                  <div key={c.mahh} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <strong>{c.tenmh}</strong>
-                      <span className={c.trangthai === 'DaTT' ? 'text-teal' : 'text-amber'}>
-                        {Number(c.tonghoahong || 0).toLocaleString()}đ
-                      </span>
+                <>
+                  {commissions.slice((commissionPage - 1) * itemsPerPage, commissionPage * itemsPerPage).map(c => (
+                    <div key={c.mahh} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <strong>{c.tenmh}</strong>
+                        <span className={c.trangthai === 'DaTT' ? 'text-teal' : 'text-amber'}>
+                          {Number(c.tonghoahong || 0).toLocaleString()}đ
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        {c.sobuoidaday || 0} buổi × {Number(c.hocphihvmoibuoi || 0).toLocaleString()}đ × {c.tylehh || 0}%
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {c.sobuoidaday || 0} buổi × {Number(c.hocphihvmoibuoi || 0).toLocaleString()}đ × {c.tylehh || 0}%
-                    </div>
-                  </div>
-                ))
+                  ))}
+                  {renderPagination(commissionPage, setCommissionPage, commissions.length)}
+                </>
               )}
             </div>
           </div>
@@ -1061,14 +1084,6 @@ function TutorDashboard() {
               <span className="close-btn" onClick={() => { setShowCalendarModal(false); }}>&times;</span>
             </div>
             
-            {/* Legend */}
-            <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', fontSize: '12px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.3)', border: '1px solid #f59e0b', display: 'inline-block' }}></span> Chờ xác nhận</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.3)', border: '1px solid #10b981', display: 'inline-block' }}></span> Đã dạy</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', border: '1px solid #ef4444', display: 'inline-block' }}></span> Vắng có phép / GS nghỉ</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(100,100,100,0.2)', border: '1px solid #666', display: 'inline-block' }}></span> Đã hủy</span>
-            </div>
-
             {/* Calendar Controls */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <button className="btn btn-sm btn-secondary" onClick={handlePrevMonth}>&larr; Tháng trước</button>
