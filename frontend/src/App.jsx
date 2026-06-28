@@ -6,6 +6,7 @@ import Login from './pages/Login.jsx';
 import TutorDashboard from './pages/TutorDashboard.jsx';
 import StudentDashboard from './pages/StudentDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import PublicTutors from './pages/PublicTutors.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -43,6 +44,7 @@ function App() {
             <a href="/#about" style={{ color: '#f8fafc', textDecoration: 'none' }}>Giới thiệu</a>
             <a href="/#subjects" style={{ color: '#f8fafc', textDecoration: 'none' }}>Môn học đào tạo</a>
             <a href="/#workflow" style={{ color: '#f8fafc', textDecoration: 'none' }}>Quy trình</a>
+            <a href="/tutors" style={{ color: '#f8fafc', textDecoration: 'none' }}>Đội ngũ Gia Sư</a>
             <a href="/#contact" style={{ color: '#f8fafc', textDecoration: 'none' }}>Liên hệ</a>
             {user ? (
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -68,6 +70,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/tutors" element={<PublicTutors />} />
           <Route path="/tutor" element={<TutorDashboard />} />
           <Route path="/student" element={<StudentDashboard />} />
           <Route path="/admin" element={<AdminDashboard />} />
