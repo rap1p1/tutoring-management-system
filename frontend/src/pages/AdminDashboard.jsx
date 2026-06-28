@@ -310,12 +310,31 @@ function AdminDashboard() {
     }
   };
 
-  const handleResolveSupport = async (id) => {
+  const handleResolveSupport = async (id, action) => {
+    const actionText = action === 'approve' ? 'chấp nhận' : 'từ chối';
+    const result = await Swal.fire({
+      title: 'Xác nhận',
+      text: `Bạn có chắc muốn ${actionText} yêu cầu đổi gia sư này?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: action === 'approve' ? '#10b981' : '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+
     try {
-      const res = await fetch(`/api/nhanvien/yeucaudoi/${id}/xuly`, { method: 'POST' });
+      const res = await fetch(`/api/nhanvien/yeucaudoi/${id}/xuly`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
       const json = await res.json();
       if (json.success) {
-        showMsg('success', 'Đã đánh dấu xử lý.');
+        showMsg('success', json.message);
         fetchData();
       } else {
         showMsg('error', json.message);

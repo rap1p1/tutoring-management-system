@@ -100,12 +100,7 @@ router.post('/:id/buoiday/:mabuoi/confirm', async (req, res) => {
         "UPDATE buoiday SET trangthai = 'DaDay', thoigianxacnhan = NOW() WHERE mabuoi = $1",
         [mabuoi]
       );
-      await pool(req).query(
-        `UPDATE yeucauhockem 
-         SET songayhoc = songayhoc + 1 
-         WHERE mayc = (SELECT mayc FROM lop WHERE malop = $1)`,
-        [id]
-      );
+
       await pool(req).query('COMMIT');
       res.json({ success: true, message: 'Ghi nhận đã dạy thành công' });
     } catch (e) {

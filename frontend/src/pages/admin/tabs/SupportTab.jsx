@@ -141,7 +141,12 @@ export default function SupportTab(props) {
                           <td><strong>HV:</strong> {s.tenhocvien}<br/><strong>GS:</strong> {s.tengiasu || 'Chưa có'}</td>
                           <td style={{ maxWidth: '250px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>) : (s.lydo)}</td>
                           <td><span className={`status-badge ${s.trangthai === 'DaXuLy' ? 'status-active' : 'status-pending'}`}>{s.trangthai === 'DaXuLy' ? 'Đã xử lý' : 'Chờ xử lý'}</span></td>
-                          <td>{s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro === 'NVQL' && (<button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg)}>Đánh dấu xử lý</button>)}</td>
+                          <td>{s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro === 'NVQL' && (
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                              <button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg, 'approve')}>Duyệt đổi</button>
+                              <button className="btn btn-xs btn-rose" onClick={() => handleResolveSupport(s.maycdg, 'reject')}>Từ chối</button>
+                            </div>
+                          )}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -117,6 +117,7 @@ export default function RequestsTab(props) {
       <option value="all">Tất cả trạng thái</option>
       <option value="ChoGhep">Chờ ghép</option>
       <option value="DaGhep">Đã ghép</option>
+      <option value="Huy">Đã hủy</option>
     </select>
   );
 
@@ -127,7 +128,7 @@ export default function RequestsTab(props) {
               {renderSearchBox && renderSearchBox('Tìm theo môn, lớp, tên HV, SĐT...', statusDropdown)}
               <table className="table">
                 <thead>
-                  <tr><th>Học viên</th><th>Môn học</th><th>Cấp lớp</th><th>Số buổi đã học / Lịch học</th><th>Trạng thái</th><th>Hành động</th></tr>
+                  <tr><th>Học viên</th><th>Môn học</th><th>Cấp lớp</th><th>Số buổi/tuần / Lịch học</th><th>Trạng thái</th><th>Hành động</th></tr>
                 </thead>
                 <tbody>
                   {paginatedData.length === 0 ? (
@@ -138,12 +139,12 @@ export default function RequestsTab(props) {
                       <td>{r.tenmh}</td>
                       <td>{r.caplop}</td>
                       <td>
-                        <strong>Đã học: {r.songayhoc} buổi</strong><br/>
+                        <strong>Số buổi/tuần: {r.songayhoc}</strong><br/>
                         <span style={{fontSize:'12px',color:'#94a3b8'}}>{formatLichHoc(r.lichhoctrongtuan)}</span>
                       </td>
                       <td>
-                        <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : 'status-pending'}`}>
-                          {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : 'Đã ghép'}
+                        <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : (r.trangthai === 'Huy' ? 'status-cancelled' : 'status-pending')}`}>
+                          {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : (r.trangthai === 'Huy' ? 'Đã hủy' : 'Đã ghép')}
                         </span>
                       </td>
                       <td>

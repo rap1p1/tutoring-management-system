@@ -55,15 +55,30 @@ app.use(session({
 
 
 // Auth middleware
-function requireAuth(req, res, next) {
+// Auth middleware
+async function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
-  next();
+  try {
+    const check = await pool.query('SELECT trangthai FROM taikhoan WHERE matk = $1', [req.session.user.matk]);
+    if (!check.rows.length || check.rows[0].trangthai === 'Khoa') {
+      req.session.destroy();
+      return res.status(401).json({ success: false, message: 'Tài khoản đã bị khóa hoặc không tồn tại' });
+    }
+    next();
+  } catch(e) { res.status(500).json({ success: false, message: 'Lỗi xác thực session' }); }
 }
 function requireRole(...roles) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!req.session.user) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
     if (!roles.includes(req.session.user.vaitro)) return res.status(403).json({ success: false, message: 'Không có quyền' });
-    next();
+    try {
+      const check = await pool.query('SELECT trangthai FROM taikhoan WHERE matk = $1', [req.session.user.matk]);
+      if (!check.rows.length || check.rows[0].trangthai === 'Khoa') {
+        req.session.destroy();
+        return res.status(401).json({ success: false, message: 'Tài khoản đã bị khóa' });
+      }
+      next();
+    } catch(e) { res.status(500).json({ success: false, message: 'Lỗi xác thực session' }); }
   };
 }
 

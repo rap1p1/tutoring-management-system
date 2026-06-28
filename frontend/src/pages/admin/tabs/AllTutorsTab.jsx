@@ -119,7 +119,7 @@ export default function AllTutorsTab(props) {
                           <td>{t.chuyennganh}</td>
                           <td>{parseInt(t.hocphimongmuon || 0).toLocaleString()}đ</td>
                           <td>{t.khuvucday || t.khuvuc}</td>
-                          <td><span className={`status-badge ${t.trangthai === 'DaDuyet' ? 'status-active' : 'status-pending'}`}>{t.trangthai}</span></td>
+                          <td><span className={`status-badge ${t.trangthai === 'DaDuyet' ? 'status-active' : (t.trangthai === 'TuChoi' ? 'status-cancelled' : 'status-pending')}`}>{t.trangthai}</span></td>
                           <td><button className="btn btn-xs btn-indigo" onClick={() => openProfileModal('tutor', t.mags)}>Chi tiết</button></td>
                         </tr>
                       ))
