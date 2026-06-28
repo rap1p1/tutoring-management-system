@@ -2,8 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const path = require('path');
 const { Pool } = require('pg');
+
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,17 +22,37 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+// Security middleware
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true
+}));
+
+// Rate limiting cho auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 phút
+  max: 10,
+  message: { success: false, message: 'Quá nhiều lần thử, vui lòng chờ 15 phút.' }
+});
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Quá nhiều lần đăng ký, vui lòng chờ 15 phút.' }
+});
+
 // Middleware
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ limit: '15mb', extended: true }));
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret',
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
+
 
 // Auth middleware
 function requireAuth(req, res, next) {
@@ -46,7 +71,7 @@ function requireRole(...roles) {
 // AUTH ROUTES
 // ============================================================
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const username = (req.body.username || '').trim();
     const password = req.body.password;
@@ -106,7 +131,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', registerLimiter, async (req, res) => {
   try {
     const { username, password, hoten, ngaysinh, sdt, email } = req.body;
     if (!username || !password || !hoten || !ngaysinh || !sdt) return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
@@ -192,19 +217,19 @@ async function seedData() {
     try {
       await client.query('BEGIN');
       // SA
-      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin','"+hash+"','SA') RETURNING matk");
+      const sa = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('admin', $1, 'SA') RETURNING matk", [hash]);
       await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Quản trị viên','0900000001','SA','2024-01-01')",[sa.rows[0].matk]);
       // BGD
-      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc','"+hash+"','BGD') RETURNING matk");
+      const bgd = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giamdoc', $1, 'BGD') RETURNING matk", [hash]);
       await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Giám đốc','0900000002','Giám đốc','2024-01-01')",[bgd.rows[0].matk]);
       // NVQL
-      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien','"+hash+"','NVQL') RETURNING matk");
+      const nv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('nhanvien', $1, 'NVQL') RETURNING matk", [hash]);
       await client.query("INSERT INTO nhanvien(matk,hoten,sdt,chucvu,ngayvaolam) VALUES($1,'Nhân viên QL','0900000003','NVQL','2024-01-01')",[nv.rows[0].matk]);
       // HV
-      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1','"+hash+"','HV') RETURNING matk");
+      const hv = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('hocvien1', $1, 'HV') RETURNING matk", [hash]);
       await client.query("INSERT INTO hocvien(matk,hoten,sdt) VALUES($1,'Học viên Mẫu','0900000004')",[hv.rows[0].matk]);
       // GS
-      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1','"+hash+"','GS') RETURNING matk");
+      const gs = await client.query("INSERT INTO taikhoan(tendangnhap,matkhau,vaitro) VALUES('giasu1', $1, 'GS') RETURNING matk", [hash]);
       await client.query("INSERT INTO giasu(matk,hoten,ngaysinh,gioitinh,cccd,sdt,trinhdohocvan,chuyennganh,kinhnghiem,khuvuc,hocphimongmuon,trangthaihoso) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')",[gs.rows[0].matk]);
       await client.query('COMMIT');
       console.log('Seed data thành công. Tài khoản mặc định: admin/admin123, hocvien1/admin123, giasu1/admin123, nhanvien/admin123, giamdoc/admin123');
