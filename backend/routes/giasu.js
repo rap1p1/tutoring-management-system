@@ -145,7 +145,7 @@ router.get('/public', async (req, res) => {
     const query = `
       SELECT 
         mags, hoten, ngaysinh, gioitinh, trinhdohocvan, chuyennganh, 
-        kinhnghiem, khuvuc, hocphimongmuon, anhdaidien
+        kinhnghiem, khuvuc, hocphimongmuon, anhdaidien, diemtrungbinh
       FROM giasu 
       WHERE trangthaihoso = 'DaDuyet'
       ORDER BY mags DESC
@@ -359,6 +359,30 @@ router.post('/lop/:id/tuchoi', async (req, res) => {
     // Đẩy yêu cầu học kèm về ChoGhep
     await client.query("UPDATE yeucauhockem SET trangthai = 'ChoGhep' WHERE mayc = $1", [lopR.rows[0].mayc]);
 
+    // Giải phóng lịch rảnh
+    const ycR = await client.query("SELECT lichhoctrongtuan FROM yeucauhockem WHERE mayc = $1", [lopR.rows[0].mayc]);
+    if (ycR.rows.length) {
+      let lichHocTrongTuan;
+      try {
+        lichHocTrongTuan = typeof ycR.rows[0].lichhoctrongtuan === 'string' 
+          ? JSON.parse(ycR.rows[0].lichhoctrongtuan) 
+          : ycR.rows[0].lichhoctrongtuan;
+      } catch (e) {}
+      if (Array.isArray(lichHocTrongTuan)) {
+        for (const item of lichHocTrongTuan) {
+          let thu = 8;
+          if (item.thu && item.thu !== 'Chu Nhat') thu = parseInt(item.thu.replace('Thu ', ''));
+          let caCode = 'Sang';
+          if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
+          if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';
+          await client.query(
+            "UPDATE lichranh_giasu SET trangthai = 'Ranh' WHERE mags = $1 AND thutrongtuan = $2 AND cahoc = $3",
+            [mags, thu, caCode]
+          );
+        }
+      }
+    }
+
     await client.query('COMMIT');
     res.json({ success: true, message: 'Từ chối lớp thành công, lớp đã được trả về trạng thái chờ ghép.' });
   } catch (e) {
@@ -458,11 +482,7 @@ router.post('/xinnghibuoi', async (req, res) => {
       }
     }
     
-    await pool(req).query(
-      "INSERT INTO buoiday(malop, ngayday, cahoc, trangthai, noidung) VALUES($1, $2, $3, 'GSXinNghi', $4)",
-      [malop, ngayday, cahoc, lydo]
-    );
-    res.json({ success: true, message: 'Đã gửi yêu cầu xin nghỉ dạy thành công, vui lòng chờ duyệt!' });
+    return res.json({ success: false, message: 'Ngày/Ca học không tồn tại trong lịch trình' });
   } catch (e) { 
     if (e.code === '23505') return res.json({ success: false, message: 'Buổi học trùng lặp' });
     res.json({ success: false, message: e.message }); 

@@ -208,7 +208,7 @@ function StudentDashboard() {
           hinhthuchoc: data.hinhthuc,
           yc_gioitinhgs: data.gioitinh,
           yc_trinhdogs: data.trinhdo,
-          songayhoc: 0,
+          songayhoc: lichHoc.length,
           lichhoctrongtuan: JSON.stringify(lichHoc),
           diachi: data.diachi,
           ghichu: data.ghichu
@@ -493,6 +493,35 @@ function StudentDashboard() {
     }
   };
 
+  const handleCancelRequest = async (id) => {
+    const result = await Swal.fire({
+      title: 'Xác nhận hủy?',
+      text: 'Bạn có chắc chắn muốn hủy yêu cầu tìm gia sư này không?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Có, hủy',
+      cancelButtonText: 'Đóng',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (result.isConfirmed) {
+      try {
+        const res = await fetch(`/api/hocvien/yeucau/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          Swal.fire({ title: 'Đã hủy', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+          fetchData();
+        } else {
+          Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      } catch (e) {
+        Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    }
+  };
+
   const handlePayTuition = async (tuition) => {
     const bankId = '970422'; // MB Bank (for example)
     const accountNo = '0123456789';
@@ -744,9 +773,21 @@ function StudentDashboard() {
                             <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatLichHoc(r.lichhoctrongtuan)}</span>
                           </td>
                           <td>
-                            <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : 'status-pending'}`}>
-                              {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : 'Đã ghép'}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : (r.trangthai === 'Huy' ? 'status-cancelled' : 'status-pending')}`} style={r.trangthai === 'Huy' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' } : {}}>
+                                {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : (r.trangthai === 'Huy' ? 'Đã hủy' : 'Đã ghép')}
+                              </span>
+                              {r.trangthai === 'ChoGhep' && (
+                                <button 
+                                  className="btn btn-xs btn-danger" 
+                                  onClick={() => handleCancelRequest(r.mayc)}
+                                  title="Hủy yêu cầu"
+                                  style={{ padding: '2px 6px', fontSize: '10px' }}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -759,7 +800,7 @@ function StudentDashboard() {
           </div>
 
           <div className="glass-card">
-            <h3>Lớp Học Đang Học</h3>
+            <h3>Danh Sách Lớp Học Của Bạn</h3>
             <div className="card-body">
               <div className="table-responsive">
                 <table className="table">
@@ -785,11 +826,8 @@ function StudentDashboard() {
                           <td>{c.tengiasu || 'Chưa phân công'}</td>
                           <td>{c.hocphimoibuoi ? parseInt(c.hocphimoibuoi).toLocaleString() + 'đ' : 'Chưa xếp'}</td>
                           <td>
-                            {c.tengiasu && (
+                            {c.tengiasu && c.trangthai !== 'KetThuc' && (
                               <div style={{ display: 'flex', gap: '5px' }}>
-                                <button className="btn btn-xs btn-primary" onClick={() => { setSelectedClassId(c.malop); setShowReviewModal(true); }}>
-                                  Đánh giá GS
-                                </button>
                                 <button className="btn btn-xs btn-secondary" onClick={() => { setSelectedClassId(c.malop); setShowChangeModal(true); }}>
                                   Đổi GS/Nghỉ
                                 </button>
@@ -797,6 +835,11 @@ function StudentDashboard() {
                                   📅 Lịch học & Báo vắng
                                 </button>
                               </div>
+                            )}
+                            {c.tengiasu && c.trangthai === 'KetThuc' && (
+                              <button className="btn btn-xs btn-primary" onClick={() => { setSelectedClassId(c.malop); setShowReviewModal(true); }}>
+                                Đánh giá GS
+                              </button>
                             )}
                           </td>
                         </tr>

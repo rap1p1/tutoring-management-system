@@ -6,10 +6,18 @@ module.exports = function(pool, auth, requireOps) {
   // Tạo hóa đơn học phí
   router.post('/hocphi/generate', requireOps, async (req, res) => {
     try {
-      const { malop, mahv, kytt_tu, kytt_den, sobuoi, hocphimoibuoi, ghichu } = req.body;
+      let { malop, mahv, kytt_tu, kytt_den, sobuoi, hocphimoibuoi, ghichu } = req.body;
       if (!malop || !mahv || !kytt_tu || !kytt_den || !sobuoi || !hocphimoibuoi) {
         return res.json({ success: false, message: 'Thiếu thông tin tạo học phí' });
       }
+      
+      const startD = new Date(kytt_tu);
+      const endD = new Date(kytt_den);
+      if (endD <= startD) {
+        startD.setDate(startD.getDate() + 1);
+        kytt_den = startD.toISOString().split('T')[0];
+      }
+
       const tonghocphi = parseInt(sobuoi) * parseInt(hocphimoibuoi);
       
       const r = await pool(req).query(
@@ -67,7 +75,7 @@ module.exports = function(pool, auth, requireOps) {
       const table = type === 'commission' ? 'hoahong' : 'hochphi';
 
       // Lấy ngày chốt cuối cùng của hóa đơn trước đó
-      const lastBilledQuery = await pool(req).query(`SELECT MAX(kytt_den) as last_date FROM ${table} WHERE malop = $1 AND trangthai != 'Huy'`, [id]);
+      const lastBilledQuery = await pool(req).query(`SELECT MAX(kytt_den) as last_date FROM ${table} WHERE malop = $1`, [id]);
       const lastDate = lastBilledQuery.rows[0].last_date;
 
       // Đếm số buổi DaDay sau ngày chốt cuối cùng
@@ -96,11 +104,18 @@ module.exports = function(pool, auth, requireOps) {
   // Tạo phiếu thanh toán hoa hồng cho gia sư
   router.post('/hoahong/generate', requireOps, async (req, res) => {
     try {
-      const { mags, malop, kytt_tu, kytt_den, sobuoida_day, hocphihvmoibuoi, tylehh } = req.body;
+      let { mags, malop, kytt_tu, kytt_den, sobuoida_day, hocphihvmoibuoi, tylehh } = req.body;
       if (!mags || !malop || !kytt_tu || !kytt_den || !sobuoida_day || !hocphihvmoibuoi || !tylehh) {
         return res.json({ success: false, message: 'Thiếu thông tin tạo hoa hồng' });
       }
       
+      const startD = new Date(kytt_tu);
+      const endD = new Date(kytt_den);
+      if (endD <= startD) {
+        startD.setDate(startD.getDate() + 1);
+        kytt_den = startD.toISOString().split('T')[0];
+      }
+
       const tonghoahong = Math.round(parseInt(sobuoida_day) * parseInt(hocphihvmoibuoi) * (parseFloat(tylehh) / 100.0));
       
       const r = await pool(req).query(

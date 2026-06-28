@@ -79,7 +79,7 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Mã gia sư không tồn tại hoặc hồ sơ gia sư chưa được duyệt' });
       }
       
-      const soNgayHoc = 20;
+      const soNgayHoc = parseInt(ycR.rows[0].songayhoc) || 20;
       let lichHocTrongTuan;
       try {
         lichHocTrongTuan = typeof ycR.rows[0].lichhoctrongtuan === 'string' 
@@ -144,6 +144,23 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         "UPDATE yeucauhockem SET trangthai = 'DaGhep', manv_tiepnhan = $1 WHERE mayc = $2",
         [manv, mayc]
       );
+      
+      if (Array.isArray(lichHocTrongTuan)) {
+        for (const item of lichHocTrongTuan) {
+          let thu = 8;
+          if (item.thu && item.thu !== 'Chu Nhat') {
+            thu = parseInt(item.thu.replace('Thu ', ''));
+          }
+          let caCode = 'Sang';
+          if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
+          if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';
+          
+          await client.query(
+            "UPDATE lichranh_giasu SET trangthai = 'DangDay' WHERE mags = $1 AND thutrongtuan = $2 AND cahoc = $3",
+            [parsedMaGS, thu, caCode]
+          );
+        }
+      }
       
       await client.query('COMMIT');
       res.json({ success: true, data: lopR.rows[0], message: 'Đã ghép lớp thành công' });
@@ -219,12 +236,44 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         [id]
       );
       
+      let lichHocTrongTuan;
+      try {
+        lichHocTrongTuan = typeof lop.lichhoctrongtuan === 'string' 
+          ? JSON.parse(lop.lichhoctrongtuan) 
+          : lop.lichhoctrongtuan;
+      } catch (e) {
+      }
+      if (Array.isArray(lichHocTrongTuan) && lop.mags) {
+        for (const item of lichHocTrongTuan) {
+          let thu = 8;
+          if (item.thu && item.thu !== 'Chu Nhat') {
+            thu = parseInt(item.thu.replace('Thu ', ''));
+          }
+          let caCode = 'Sang';
+          if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
+          if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';
+          
+          await client.query(
+            "UPDATE lichranh_giasu SET trangthai = 'Ranh' WHERE mags = $1 AND thutrongtuan = $2 AND cahoc = $3",
+            [lop.mags, thu, caCode]
+          );
+        }
+      }
+      
       let hocphiCreated = null;
       let hoahongCreated = null;
       
       if (soBuoiTinhPhi > 0 && lop.mahv) {
-        const kyTuNgay = stats.ngay_dau || lop.ngaybatdau;
-        const kyDenNgay = stats.ngay_cuoi || new Date().toISOString().split('T')[0];
+        let kyTuNgay = stats.ngay_dau || lop.ngaybatdau;
+        let kyDenNgay = stats.ngay_cuoi || new Date().toISOString().split('T')[0];
+        
+        const startD = new Date(kyTuNgay);
+        const endD = new Date(kyDenNgay);
+        if (endD <= startD) {
+          startD.setDate(startD.getDate() + 1);
+          kyDenNgay = startD.toISOString().split('T')[0];
+        }
+
         const tongHocPhi = soBuoiTinhPhi * parseInt(lop.hocphimoibuoi);
         
         const hpR = await client.query(

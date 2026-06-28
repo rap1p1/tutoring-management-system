@@ -32,24 +32,36 @@ module.exports = function(pool, auth, requireOps) {
         [status, manv, id]
       );
 
-      // Gửi email thông báo duyệt (dùng Gmail SMTP thật)
-      if (status === 'DaDuyet' && gsR.rows.length > 0 && gsR.rows[0].email) {
+      // Gửi email thông báo duyệt/từ chối (dùng Gmail SMTP thật)
+      if (gsR.rows.length > 0 && gsR.rows[0].email) {
         const gsEmail = gsR.rows[0].email;
         const gsName = gsR.rows[0].hoten;
         
-        sendEmail({
-          to: gsEmail,
-          subject: '🎉 Chúc mừng bạn đã trở thành Gia Sư chính thức!',
-          html: `<h3>Chào ${gsName},</h3>
-                 <p>Hồ sơ đăng ký làm gia sư của bạn đã được <b>duyệt thành công</b>!</p>
-                 <p>Bây giờ bạn có thể đăng nhập vào hệ thống để bắt đầu nhận lớp và giảng dạy.</p>
-                 <br/>
-                 <p>Trân trọng,<br/>Ban Quản Lý Trung Tâm Gia Sư</p>`
-        }).then(() => {
-          console.log('✅ Đã gửi email thông báo duyệt gia sư tới:', gsEmail);
-        }).catch(err => {
-          console.error('❌ Gửi email duyệt thất bại:', err);
-        });
+        if (status === 'DaDuyet') {
+          sendEmail({
+            to: gsEmail,
+            subject: '🎉 Chúc mừng bạn đã trở thành Gia Sư chính thức!',
+            html: `<h3>Chào ${gsName},</h3>
+                   <p>Hồ sơ đăng ký làm gia sư của bạn đã được <b>duyệt thành công</b>!</p>
+                   <p>Bây giờ bạn có thể đăng nhập vào hệ thống để bắt đầu nhận lớp và giảng dạy.</p>
+                   <br/>
+                   <p>Trân trọng,<br/>Ban Quản Lý Trung Tâm Gia Sư</p>`
+          }).then(() => {
+            console.log('✅ Đã gửi email thông báo duyệt gia sư tới:', gsEmail);
+          }).catch(err => console.error('❌ Gửi email duyệt thất bại:', err));
+        } else if (status === 'TuChoi') {
+          sendEmail({
+            to: gsEmail,
+            subject: 'Thông báo về kết quả đăng ký gia sư',
+            html: `<h3>Chào ${gsName},</h3>
+                   <p>Rất tiếc phải thông báo rằng hồ sơ đăng ký làm gia sư của bạn đã <b>không được duyệt</b>.</p>
+                   <p>Nguyên nhân có thể do hồ sơ chưa đạt yêu cầu, thiếu minh chứng hoặc thông tin không chính xác. Bạn vui lòng kiểm tra lại hoặc liên hệ trung tâm để biết thêm chi tiết.</p>
+                   <br/>
+                   <p>Trân trọng,<br/>Ban Quản Lý Trung Tâm Gia Sư</p>`
+          }).then(() => {
+            console.log('✅ Đã gửi email thông báo từ chối gia sư tới:', gsEmail);
+          }).catch(err => console.error('❌ Gửi email từ chối thất bại:', err));
+        }
       }
 
       res.json({ success: true, message: `Đã cập nhật trạng thái hồ sơ gia sư thành: ${status}` });

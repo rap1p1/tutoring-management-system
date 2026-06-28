@@ -89,7 +89,7 @@ CREATE TABLE GIASU (
   KinhNghiem        SMALLINT       NOT NULL DEFAULT 0 CHECK (KinhNghiem >= 0),
   KhuVuc            VARCHAR(200)   NOT NULL,
   HocPhiMongMuon    INT            NOT NULL CHECK (HocPhiMongMuon > 0),
-  DiemTrungBinh     DECIMAL(3,2)   CHECK (DiemTrungBinh BETWEEN 1.0 AND 5.0),
+  DiemTrungBinh     DECIMAL(3,2)   DEFAULT 5.00 CHECK (DiemTrungBinh BETWEEN 1.0 AND 5.0),
   TrangThaiHoSo     VARCHAR(15)    NOT NULL DEFAULT 'ChoDuyet' CHECK (TrangThaiHoSo IN ('ChoDuyet','DaDuyet','TuChoi')),
   NgayDangKy        TIMESTAMP      NOT NULL DEFAULT NOW(),
   NgayDuyet         TIMESTAMP,

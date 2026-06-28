@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, BookOpen, GraduationCap, DollarSign, User, Search } from 'lucide-react';
+import { MapPin, BookOpen, GraduationCap, DollarSign, User, Search, Star } from 'lucide-react';
 
 function PublicTutors() {
   const [tutors, setTutors] = useState([]);
@@ -116,6 +116,14 @@ function PublicTutors() {
                       <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '4px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>
                         GS{gs.mags.toString().padStart(3, '0')}
                       </span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '8px' }}>
+                      <Star size={16} fill="#fbbf24" color="#fbbf24" />
+                      <span style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '1rem' }}>
+                        {gs.diemtrungbinh ? Number(gs.diemtrungbinh).toFixed(1) : '5.0'}
+                      </span>
+                      {!gs.diemtrungbinh && <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '4px' }}>(Mới)</span>}
                     </div>
                     
                     <p style={{ margin: '0 0 15px 0', color: '#94a3b8', fontSize: '0.9rem', display: 'flex', gap: '8px', alignItems: 'center' }}>

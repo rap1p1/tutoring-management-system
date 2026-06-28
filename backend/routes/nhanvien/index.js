@@ -66,7 +66,7 @@ router.use('/', require('./stats')(pool, auth));
 router.use('/', require('./giasu.routes')(pool, auth, requireOps));
 router.use('/', require('./lop.routes')(pool, auth, requireOps, generateSessions));
 router.use('/', require('./taichinh.routes')(pool, auth, requireOps));
-router.use('/', require('./hotro.routes')(pool, auth, requireOps));
+router.use('/', require('./hotro.routes')(pool, auth, requireOps, generateSessions));
 router.use('/', require('./taikhoan.routes')(pool, auth));
 router.use('/', require('./config.routes')(pool, auth));
 

@@ -115,7 +115,7 @@ router.get('/lop', async (req, res) => {
        JOIN yeucauhockem yc ON yc.mayc = l.mayc
        JOIN monhoc mh ON mh.mamh = yc.mamh
        LEFT JOIN giasu gs ON gs.mags = l.mags
-       WHERE yc.mahv=$1 AND l.trangthai NOT IN ('KetThuc', 'Huy')
+       WHERE yc.mahv=$1 AND l.trangthai != 'Huy'
        ORDER BY l.ngaytao DESC`, [mahv]
     );
     res.json({ success: true, data: r.rows });
@@ -149,11 +149,19 @@ router.post('/danhgia', async (req, res) => {
     if (!malop || !diem) return res.json({ success: false, message: 'Thiếu thông tin' });
     const hvR = await pool(req).query('SELECT mahv FROM hocvien WHERE matk=$1', [auth(req).matk]);
     const mahv = hvR.rows[0].mahv;
-    const lopR = await pool(req).query('SELECT mags FROM lop WHERE malop=$1', [malop]);
+    const lopR = await pool(req).query('SELECT mags, trangthai FROM lop WHERE malop=$1', [malop]);
     if (!lopR.rows.length) return res.json({ success: false, message: 'Không tìm thấy lớp' });
+    
+    if (lopR.rows[0].trangthai !== 'KetThuc') {
+      return res.json({ success: false, message: 'Chỉ được đánh giá gia sư sau khi lớp học đã kết thúc' });
+    }
+    
     const mags = lopR.rows[0].mags;
     await pool(req).query(
-      'INSERT INTO danhgia(malop,mahv,mags,diem,nhanxet) VALUES($1,$2,$3,$4,$5)',
+      `INSERT INTO danhgia(malop,mahv,mags,diem,nhanxet,ngaydanhgia) 
+       VALUES($1,$2,$3,$4,$5,NOW()) 
+       ON CONFLICT (malop, mahv) DO UPDATE 
+       SET diem = EXCLUDED.diem, nhanxet = EXCLUDED.nhanxet, ngaydanhgia = EXCLUDED.ngaydanhgia`,
       [malop, mahv, mags, diem, nhanxet || null]
     );
     // Cập nhật điểm TB gia sư
@@ -190,10 +198,21 @@ router.post('/doigiasu', async (req, res) => {
     if (!lopCheck.rows.length) return res.json({ success: false, message: 'Không tìm thấy lớp' });
     const mags = lopCheck.rows[0].mags;
 
+    const ycCheck = await pool(req).query(
+      `SELECT yc.ghichu FROM yeucauhockem yc JOIN lop l ON yc.mayc = l.mayc WHERE l.malop = $1`,
+      [malop]
+    );
+    const ghichu = ycCheck.rows.length ? (ycCheck.rows[0].ghichu || '') : '';
+    let landoithu = 1;
+    if (ghichu.includes('Đổi gia sư lần 1')) landoithu = 2;
+    if (ghichu.includes('Đổi gia sư lần 2')) {
+      return res.json({ success: false, message: 'Bạn đã hết số lần được phép đổi gia sư cho môn học này (Tối đa 2 lần).' });
+    }
+
     await pool(req).query(
       `INSERT INTO yeucaudoigiasu (malop, mahv, mags, landoithu, lydo, trangthai) 
-       VALUES ($1, $2, $3, 1, $4, 'ChoXuLy')`,
-      [malop, mahv, mags, lydo]
+       VALUES ($1, $2, $3, $4, $5, 'ChoXuLy')`,
+      [malop, mahv, mags, landoithu, lydo]
     );
     res.json({ success: true, message: 'Đã gửi yêu cầu thành công' });
   } catch (e) {
@@ -233,12 +252,7 @@ router.post('/xinnghibuoi', async (req, res) => {
       }
     }
 
-    // Nếu chưa có buổi dạy → tạo mới với trạng thái HVXinNghi
-    await pool(req).query(
-      "INSERT INTO buoiday(malop, ngayday, cahoc, trangthai, noidung) VALUES($1, $2, $3, 'HVXinNghi', $4)",
-      [malop, ngayday, cahoc, lydo]
-    );
-    res.json({ success: true, message: 'Đã gửi yêu cầu xin nghỉ thành công, vui lòng chờ duyệt!' });
+    return res.json({ success: false, message: 'Ngày/Ca học không tồn tại trong lịch trình' });
   } catch (e) {
     if (e.code === '23505') return res.json({ success: false, message: 'Buổi học trùng lặp' });
     res.json({ success: false, message: e.message });
@@ -329,6 +343,26 @@ router.post('/xacnhanbuoi', async (req, res) => {
       [mabuoi]
     );
     res.json({ success: true, message: 'Xác nhận buổi học thành công' });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
+});
+
+// Học viên hủy yêu cầu học kèm đang chờ ghép lớp
+router.delete('/yeucau/:id', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'HV') return res.json({ success: false, message: 'Không có quyền' });
+  try {
+    const mayc = req.params.id;
+    const hvR = await pool(req).query('SELECT mahv FROM hocvien WHERE matk = $1', [auth(req).matk]);
+    if (!hvR.rows.length) return res.json({ success: false, message: 'Không tìm thấy học viên' });
+    const mahv = hvR.rows[0].mahv;
+
+    const ycR = await pool(req).query('SELECT trangthai FROM yeucauhockem WHERE mayc = $1 AND mahv = $2', [mayc, mahv]);
+    if (!ycR.rows.length) return res.json({ success: false, message: 'Không tìm thấy yêu cầu' });
+    if (ycR.rows[0].trangthai !== 'ChoGhep') return res.json({ success: false, message: 'Chỉ có thể hủy yêu cầu đang chờ ghép' });
+
+    await pool(req).query("UPDATE yeucauhockem SET trangthai = 'Huy' WHERE mayc = $1", [mayc]);
+    res.json({ success: true, message: 'Đã hủy yêu cầu thành công' });
   } catch (e) {
     res.json({ success: false, message: e.message });
   }
