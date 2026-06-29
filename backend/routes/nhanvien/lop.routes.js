@@ -69,7 +69,9 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         }
       }
 
-      const start = ngaybatdau || new Date().toISOString().split('T')[0];
+      const vnTimeForStart = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+      const vnTodayStr = vnTimeForStart.getFullYear() + '-' + String(vnTimeForStart.getMonth() + 1).padStart(2, '0') + '-' + String(vnTimeForStart.getDate()).padStart(2, '0');
+      const start = ngaybatdau || vnTodayStr;
 
       const nvR = await client.query('SELECT manv FROM nhanvien WHERE matk = $1', [auth(req).matk]);
       const manv = nvR.rows.length ? nvR.rows[0].manv : null;
@@ -330,8 +332,66 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Tỷ lệ hoa hồng phải từ 0 đến 100' });
       }
       
-      await pool(req).query('UPDATE lop SET tylehhgiasu = $1 WHERE malop = $2', [parsedTyLe, id]);
-      res.json({ success: true, message: `Đã cập nhật tỷ lệ hoa hồng thành ${parsedTyLe}%` });
+      const client = await pool(req).connect();
+      try {
+        await client.query('BEGIN');
+        
+        const lopRes = await client.query('SELECT mags, hocphimoibuoi, tylehhgiasu FROM lop WHERE malop = $1', [id]);
+        if (lopRes.rows.length === 0) {
+          throw new Error('Không tìm thấy lớp học');
+        }
+        const lopInfo = lopRes.rows[0];
+        
+        // Find last billed date
+        const lastBilledQuery = await client.query('SELECT MAX(kytt_den) as last_date FROM hoahong WHERE malop = $1', [id]);
+        const lastDate = lastBilledQuery.rows[0].last_date;
+        
+        let unbilledQuery = '';
+        let unbilledParams = [id];
+        if (lastDate) {
+          unbilledQuery = "SELECT * FROM buoiday WHERE malop = $1 AND trangthai = 'DaDay' AND ngayday > $2 ORDER BY ngayday ASC";
+          unbilledParams.push(lastDate);
+        } else {
+          unbilledQuery = "SELECT * FROM buoiday WHERE malop = $1 AND trangthai = 'DaDay' ORDER BY ngayday ASC";
+        }
+        const unbilledRes = await client.query(unbilledQuery, unbilledParams);
+        
+        if (unbilledRes.rows.length > 0) {
+          const sobuoi = unbilledRes.rows.length;
+          const firstDate = unbilledRes.rows[0].ngayday.toISOString().split('T')[0];
+          let lastSessionDate = unbilledRes.rows[unbilledRes.rows.length - 1].ngayday.toISOString().split('T')[0];
+          
+          const startD = new Date(firstDate);
+          const endD = new Date(lastSessionDate);
+          if (endD <= startD) {
+            startD.setDate(startD.getDate() + 1);
+            lastSessionDate = startD.toISOString().split('T')[0];
+          }
+          
+          const tonghoahong = Math.round(sobuoi * lopInfo.hocphimoibuoi * (parseFloat(lopInfo.tylehhgiasu) / 100.0));
+          
+          await client.query(
+            `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoidaday, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT')`,
+            [lopInfo.mags, id, firstDate, lastSessionDate, sobuoi, lopInfo.hocphimoibuoi, lopInfo.tylehhgiasu, tonghoahong]
+          );
+        }
+        
+        await client.query('UPDATE lop SET tylehhgiasu = $1 WHERE malop = $2', [parsedTyLe, id]);
+        
+        await client.query('COMMIT');
+        
+        let msg = `Đã cập nhật tỷ lệ hoa hồng thành ${parsedTyLe}%`;
+        if (unbilledRes.rows.length > 0) {
+          msg += ` và tự động chốt ${unbilledRes.rows.length} buổi chưa thanh toán (tỷ lệ cũ).`;
+        }
+        res.json({ success: true, message: msg });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (e) { res.json({ success: false, message: e.message }); }
   });
 
