@@ -310,11 +310,12 @@ function AdminDashboard() {
     }
   };
 
-  const handleResolveSupport = async (id, action) => {
+  const handleResolveSupport = async (id, action, loaiyeucau = 'DoiGiaSu') => {
     const actionText = action === 'approve' ? 'chấp nhận' : 'từ chối';
+    const typeText = loaiyeucau === 'NghiLop' ? 'nghỉ học' : 'đổi gia sư';
     const result = await Swal.fire({
       title: 'Xác nhận',
-      text: `Bạn có chắc muốn ${actionText} yêu cầu đổi gia sư này?`,
+      text: `Bạn có chắc muốn ${actionText} yêu cầu ${typeText} này?`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: action === 'approve' ? '#10b981' : '#ef4444',
@@ -332,6 +333,35 @@ function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })
       });
+      const json = await res.json();
+      if (json.success) {
+        showMsg('success', json.message);
+        fetchData();
+      } else {
+        showMsg('error', json.message);
+      }
+    } catch (e) {
+      showMsg('error', 'Lỗi kết nối.');
+    }
+  };
+
+  const handleCancelRequest = async (id) => {
+    const result = await Swal.fire({
+      title: 'Xác nhận hủy',
+      text: `Bạn có chắc chắn muốn từ chối/hủy yêu cầu học kèm này?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Hủy yêu cầu',
+      cancelButtonText: 'Đóng',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/nhanvien/yeucau/${id}/huy`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
         showMsg('success', json.message);
@@ -797,6 +827,7 @@ function AdminDashboard() {
     fetchData,
     handleApproveTutor,
     handleOpenClassModal,
+    handleCancelRequest,
     formatLichHoc,
     handleCreateClass,
     handleConfirmTuition,

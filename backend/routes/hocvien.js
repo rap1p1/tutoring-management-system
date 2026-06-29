@@ -209,10 +209,12 @@ router.post('/doigiasu', async (req, res) => {
       return res.json({ success: false, message: 'Bạn đã hết số lần được phép đổi gia sư cho môn học này (Tối đa 2 lần).' });
     }
 
+    const loai = req.body.loaiyeucau || 'DoiGiaSu';
+
     await pool(req).query(
-      `INSERT INTO yeucaudoigiasu (malop, mahv, mags, landoithu, lydo, trangthai) 
-       VALUES ($1, $2, $3, $4, $5, 'ChoXuLy')`,
-      [malop, mahv, mags, landoithu, lydo]
+      `INSERT INTO yeucaudoigiasu (malop, mahv, mags, landoithu, lydo, loaiyeucau, trangthai) 
+       VALUES ($1, $2, $3, $4, $5, $6, 'ChoXuLy')`,
+      [malop, mahv, mags, landoithu, lydo, loai]
     );
     res.json({ success: true, message: 'Đã gửi yêu cầu thành công' });
   } catch (e) {

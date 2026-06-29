@@ -268,7 +268,8 @@ function StudentDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           malop: selectedClassId,
-          lydo: e.target.lydo.value
+          lydo: e.target.lydo.value,
+          loaiyeucau: e.target.loaiyeucau.value
         })
       });
       const json = await res.json();
@@ -1183,6 +1184,17 @@ function StudentDashboard() {
             )}
 
             <form onSubmit={handleChangeTutor}>
+              <div className="form-group" style={{ marginBottom: '15px' }}>
+                <label>Loại yêu cầu *</label>
+                <div style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                    <input type="radio" name="loaiyeucau" value="DoiGiaSu" defaultChecked /> Đổi gia sư
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                    <input type="radio" name="loaiyeucau" value="NghiLop" /> Nghỉ học
+                  </label>
+                </div>
+              </div>
               <div className="form-group">
                 <label>Lý do (Chi tiết) *</label>
                 <textarea name="lydo" rows="4" required style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }} placeholder="Ghi rõ lý do bạn muốn đổi gia sư hoặc nghỉ học..."></textarea>
