@@ -139,12 +139,21 @@ export default function SupportTab(props) {
                           <td>{new Date(s.ngayyeucau).toLocaleString('vi-VN')}</td>
                           <td>Lớp {s.malop}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{s.tenmh}</span></td>
                           <td><strong>HV:</strong> {s.tenhocvien}<br/><strong>GS:</strong> {s.tengiasu || 'Chưa có'}</td>
-                          <td style={{ maxWidth: '250px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>) : (s.lydo)}</td>
-                          <td><span className={`status-badge ${s.trangthai === 'DaXuLy' ? 'status-active' : 'status-pending'}`}>{s.trangthai === 'DaXuLy' ? 'Đã xử lý' : 'Chờ xử lý'}</span></td>
+                          <td style={{ maxWidth: '250px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            <span style={{ fontWeight: 'bold', color: s.loaiyeucau === 'NghiLop' ? '#ef4444' : '#3b82f6' }}>
+                              [{s.loaiyeucau === 'NghiLop' ? 'Nghỉ học' : 'Đổi gia sư'}]
+                            </span><br />
+                            {s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>) : (s.lydo)}
+                          </td>
+                          <td>
+                            <span className={`status-badge ${s.trangthai === 'DaXuLy' ? 'status-active' : (s.trangthai === 'TuChoi' ? 'status-cancelled' : 'status-pending')}`}>
+                              {s.trangthai === 'DaXuLy' ? 'Đã xử lý' : (s.trangthai === 'TuChoi' ? 'Đã từ chối' : 'Chờ xử lý')}
+                            </span>
+                          </td>
                           <td>{s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro === 'NVQL' && (
                             <div style={{ display: 'flex', gap: '5px' }}>
-                              <button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg, 'approve')}>Duyệt đổi</button>
-                              <button className="btn btn-xs btn-rose" onClick={() => handleResolveSupport(s.maycdg, 'reject')}>Từ chối</button>
+                              <button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg, 'approve', s.loaiyeucau)}>{s.loaiyeucau === 'NghiLop' ? 'Duyệt nghỉ' : 'Duyệt đổi'}</button>
+                              <button className="btn btn-xs btn-rose" onClick={() => handleResolveSupport(s.maycdg, 'reject', s.loaiyeucau)}>Từ chối</button>
                             </div>
                           )}</td>
                         </tr>

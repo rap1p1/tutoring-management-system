@@ -371,7 +371,7 @@ router.post('/lop/:id/tuchoi', async (req, res) => {
       if (Array.isArray(lichHocTrongTuan)) {
         for (const item of lichHocTrongTuan) {
           let thu = 8;
-          if (item.thu && item.thu !== 'Chu Nhat') thu = parseInt(item.thu.replace('Thu ', ''));
+          if (item.thu && item.thu.toString() !== 'Chu Nhat') thu = parseInt(item.thu.toString().replace('Thu ', ''));
           let caCode = 'Sang';
           if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
           if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';

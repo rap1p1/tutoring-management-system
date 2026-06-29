@@ -148,8 +148,8 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
       if (Array.isArray(lichHocTrongTuan)) {
         for (const item of lichHocTrongTuan) {
           let thu = 8;
-          if (item.thu && item.thu !== 'Chu Nhat') {
-            thu = parseInt(item.thu.replace('Thu ', ''));
+          if (item.thu && item.thu.toString() !== 'Chu Nhat') {
+            thu = parseInt(item.thu.toString().replace('Thu ', ''));
           }
           let caCode = 'Sang';
           if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
@@ -246,8 +246,8 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
       if (Array.isArray(lichHocTrongTuan) && lop.mags) {
         for (const item of lichHocTrongTuan) {
           let thu = 8;
-          if (item.thu && item.thu !== 'Chu Nhat') {
-            thu = parseInt(item.thu.replace('Thu ', ''));
+          if (item.thu && item.thu.toString() !== 'Chu Nhat') {
+            thu = parseInt(item.thu.toString().replace('Thu ', ''));
           }
           let caCode = 'Sang';
           if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';

@@ -7,7 +7,7 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
   router.get('/yeucaudoi', async (req, res) => {
     try {
       const r = await pool(req).query(
-        `SELECT ycd.*, l.malop, hv.hoten AS tenhocvien, gs.hoten AS tengiasu, mh.tenmh 
+        `SELECT ycd.maycdg, ycd.malop, ycd.mahv, ycd.mags, ycd.landoithu, ycd.lydo, ycd.trangthai, ycd.ngayyeucau, ycd.ngayxuly, ycd.manv_xuly, ycd.loaiyeucau, l.malop, hv.hoten AS tenhocvien, gs.hoten AS tengiasu, mh.tenmh 
          FROM yeucaudoigiasu ycd
          JOIN lop l ON l.malop = ycd.malop
          JOIN hocvien hv ON hv.mahv = ycd.mahv
@@ -33,7 +33,7 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Hành động không hợp lệ' });
       }
 
-      const reqInfo = await client.query('SELECT malop, lydo, trangthai, landoithu FROM yeucaudoigiasu WHERE maycdg = $1', [id]);
+      const reqInfo = await client.query('SELECT malop, lydo, loaiyeucau, trangthai, landoithu FROM yeucaudoigiasu WHERE maycdg = $1', [id]);
       if (!reqInfo.rows.length) {
         return res.json({ success: false, message: 'Yêu cầu không tồn tại' });
       }
@@ -106,18 +106,20 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         [classId]
       );
 
-      // Clone YEUCAUHOCKEM
-      const ycR = await client.query(
-        `SELECT yc.* FROM yeucauhockem yc JOIN lop l ON yc.mayc = l.mayc WHERE l.malop = $1`, [classId]
-      );
-      if (ycR.rows.length > 0) {
-        const yc = ycR.rows[0];
-        const newGhiChu = `Đổi gia sư lần ${rInfo.landoithu} (Từ lớp cũ: ${classId}). ${yc.ghichu ? yc.ghichu : ''}`;
-        await client.query(
-          `INSERT INTO yeucauhockem (mahv, mamh, caplop, hinhthuchoc, yc_gioitinhgs, yc_trinhdogs, songayhoc, lichhoctrongtuan, diachi, ghichu, trangthai, manv_tiepnhan)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ChoGhep', $11)`,
-           [yc.mahv, yc.mamh, yc.caplop, yc.hinhthuchoc, yc.yc_gioitinhgs, yc.yc_trinhdogs, yc.songayhoc, yc.lichhoctrongtuan, yc.diachi, newGhiChu, manv]
+      // Clone YEUCAUHOCKEM (Only if DoiGiaSu)
+      if (rInfo.loaiyeucau !== 'NghiLop') {
+        const ycR = await client.query(
+          `SELECT yc.* FROM yeucauhockem yc JOIN lop l ON yc.mayc = l.mayc WHERE l.malop = $1`, [classId]
         );
+        if (ycR.rows.length > 0) {
+          const yc = ycR.rows[0];
+          const newGhiChu = `Đổi gia sư lần ${rInfo.landoithu} (Từ lớp cũ: ${classId}). ${yc.ghichu ? yc.ghichu : ''}`;
+          await client.query(
+            `INSERT INTO yeucauhockem (mahv, mamh, caplop, hinhthuchoc, yc_gioitinhgs, yc_trinhdogs, songayhoc, lichhoctrongtuan, diachi, ghichu, trangthai, manv_tiepnhan)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ChoGhep', $11)`,
+             [yc.mahv, yc.mamh, yc.caplop, yc.hinhthuchoc, yc.yc_gioitinhgs, yc.yc_trinhdogs, yc.songayhoc, yc.lichhoctrongtuan, yc.diachi, newGhiChu, manv]
+          );
+        }
       }
 
       // Bills
@@ -154,7 +156,10 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
       }
 
       await client.query('COMMIT');
-      res.json({ success: true, message: 'Đã duyệt yêu cầu, chốt lớp cũ và tạo yêu cầu ghép lớp mới thành công' });
+      const successMsg = rInfo.loaiyeucau === 'NghiLop'
+        ? 'Đã duyệt yêu cầu nghỉ học và chốt lớp thành công'
+        : 'Đã duyệt yêu cầu, chốt lớp cũ và tạo yêu cầu ghép lớp mới thành công';
+      res.json({ success: true, message: successMsg });
     } catch (e) {
       await client.query('ROLLBACK');
       res.json({ success: false, message: e.message });

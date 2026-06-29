@@ -123,6 +123,27 @@ module.exports = function(pool, auth, requireOps) {
     } catch (e) { res.json({ success: false, message: e.message }); }
   });
 
+  // Hủy yêu cầu học kèm
+  router.post('/yeucau/:id/huy', requireOps, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const checkR = await pool(req).query('SELECT trangthai FROM yeucauhockem WHERE mayc = $1', [id]);
+      if (!checkR.rows.length) return res.json({ success: false, message: 'Không tìm thấy yêu cầu' });
+      if (checkR.rows[0].trangthai !== 'ChoGhep') {
+        return res.json({ success: false, message: 'Chỉ có thể hủy yêu cầu đang ở trạng thái Chờ ghép' });
+      }
+      
+      const nvR = await pool(req).query('SELECT manv FROM nhanvien WHERE matk = $1', [auth(req).matk]);
+      const manv = nvR.rows.length ? nvR.rows[0].manv : null;
+
+      await pool(req).query(
+        "UPDATE yeucauhockem SET trangthai = 'Huy', manv_tiepnhan = $1 WHERE mayc = $2",
+        [manv, id]
+      );
+      res.json({ success: true, message: 'Đã hủy yêu cầu thành công' });
+    } catch (e) { res.json({ success: false, message: e.message }); }
+  });
+
   // Chi tiết học viên (có lớp đang học)
   router.get('/hocvien/:id/detail', async (req, res) => {
     try {

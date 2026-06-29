@@ -74,6 +74,7 @@ export default function RequestsTab(props) {
     fetchData,
     handleApproveTutor,
     handleOpenClassModal,
+    handleCancelRequest,
     formatLichHoc,
     handleCreateClass,
     handleConfirmTuition,
@@ -149,9 +150,14 @@ export default function RequestsTab(props) {
                       </td>
                       <td>
                         {r.trangthai === 'ChoGhep' && currentUser && currentUser.vaitro !== 'BGD' && (
-                          <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassModal(r)}>
-                            Tạo Lớp & Ghép GS
-                          </button>
+                          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                            <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassModal(r)}>
+                              Tạo Lớp & Ghép GS
+                            </button>
+                            <button className="btn btn-xs btn-rose" onClick={() => handleCancelRequest(r.mayc)}>
+                              Từ chối
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
