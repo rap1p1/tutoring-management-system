@@ -41,6 +41,9 @@ module.exports = function(pool, auth) {
       if (targetUser.vaitro === 'BGD' && auth(req).vaitro === 'SA') {
         return res.json({ success: false, message: 'Admin không có quyền khóa/mở khóa tài khoản của Giám đốc' });
       }
+      if (targetUser.vaitro === 'SA' && auth(req).vaitro === 'BGD') {
+        return res.json({ success: false, message: 'Giám đốc không có quyền khóa/mở khóa tài khoản của Quản trị viên hệ thống (Admin)' });
+      }
 
       const currentStatus = targetUser.trangthai;
       const newStatus = currentStatus === 'Khoa' ? 'HoatDong' : 'Khoa';

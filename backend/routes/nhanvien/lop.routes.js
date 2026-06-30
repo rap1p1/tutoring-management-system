@@ -13,11 +13,28 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Thiếu thông tin bắt buộc hoặc mã gia sư không hợp lệ để tạo lớp' });
       }
 
-      const ycR = await client.query('SELECT songayhoc, lichhoctrongtuan, caplop FROM yeucauhockem WHERE mayc = $1', [mayc]);
+      const ycR = await client.query(`
+        SELECT yc.songayhoc, yc.lichhoctrongtuan, yc.caplop, yc.mamh, mh.tenmh 
+        FROM yeucauhockem yc 
+        JOIN monhoc mh ON mh.mamh = yc.mamh 
+        WHERE yc.mayc = $1
+      `, [mayc]);
       if (!ycR.rows.length) {
         return res.json({ success: false, message: 'Không tìm thấy yêu cầu học kèm' });
       }
-      const caplop = ycR.rows[0].caplop;
+      const { caplop, mamh, tenmh } = ycR.rows[0];
+
+      // Khóa cứng: Kiểm tra xem gia sư có đăng ký môn này hoặc có chuyên ngành khớp môn này không
+      const subjectCheck = await client.query(`
+        SELECT 1 
+        FROM giasu gs 
+        LEFT JOIN giasu_monhoc gm ON gs.mags = gm.mags AND gm.mamh = $1 
+        WHERE gs.mags = $2 AND (gm.mamh IS NOT NULL OR gs.chuyennganh = $3)
+      `, [mamh, parsedMaGS, tenmh]);
+      
+      if (!subjectCheck.rows.length) {
+        return res.json({ success: false, message: 'Gia sư chưa đăng ký môn học này và chuyên ngành cũng không khớp. Vui lòng chọn gia sư khác.' });
+      }
 
       const getDbDefaultHocPhi = async (cap) => {
         let key = 'HocPhi_Khac';
@@ -52,7 +69,9 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         }
       }
 
-      const start = ngaybatdau || new Date().toISOString().split('T')[0];
+      const vnTimeForStart = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+      const vnTodayStr = vnTimeForStart.getFullYear() + '-' + String(vnTimeForStart.getMonth() + 1).padStart(2, '0') + '-' + String(vnTimeForStart.getDate()).padStart(2, '0');
+      const start = ngaybatdau || vnTodayStr;
 
       const nvR = await client.query('SELECT manv FROM nhanvien WHERE matk = $1', [auth(req).matk]);
       const manv = nvR.rows.length ? nvR.rows[0].manv : null;
@@ -62,7 +81,7 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Mã gia sư không tồn tại hoặc hồ sơ gia sư chưa được duyệt' });
       }
       
-      const soNgayHoc = 20;
+      const soNgayHoc = parseInt(ycR.rows[0].songayhoc) || 20;
       let lichHocTrongTuan;
       try {
         lichHocTrongTuan = typeof ycR.rows[0].lichhoctrongtuan === 'string' 
@@ -72,17 +91,47 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Lịch học trong tuần không hợp lệ' });
       }
 
+      const sessions = generateSessions(start, soNgayHoc, lichHocTrongTuan);
+
+      // KIỂM TRA TRÙNG LỊCH GIA SƯ
+      const existingSessions = await client.query(
+        `SELECT bd.ngayday, bd.cahoc 
+         FROM buoiday bd 
+         JOIN lop l ON bd.malop = l.malop 
+         WHERE l.mags = $1 AND l.trangthai IN ('DangDay', 'DaPhanCong') AND bd.trangthai IN ('ChoXacNhan', 'DaDay')`,
+        [parsedMaGS]
+      );
+      
+      // Tạo Set các chuỗi "YYYY-MM-DD_Cahoc" để dò tìm nhanh
+      const existingMap = new Set(
+        existingSessions.rows.map(s => {
+          const d = new Date(s.ngayday);
+          const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          return `${dateStr}_${s.cahoc}`;
+        })
+      );
+      
+      for (const session of sessions) {
+        if (existingMap.has(`${session.ngayday}_${session.cahoc}`)) {
+          await client.query('ROLLBACK');
+          return res.json({ 
+            success: false, 
+            message: `Gia sư đã bị trùng lịch vào ngày ${session.ngayday.split('-').reverse().join('/')} (Ca ${session.cahoc === 'Sang' ? 'Sáng' : session.cahoc === 'Chieu' ? 'Chiều' : 'Tối'}). Vui lòng chọn gia sư khác!` 
+          });
+        }
+      }
+
       await client.query('BEGIN');
       
       const lopR = await client.query(
-        `INSERT INTO lop (mayc, mags, manv_phancong, ngaybatdau, ngayketthucdukien, trangthai, noidung, diadiem, hinhthuchoc, hocphimoibuoi, tylehhgiasu)
-         VALUES ($1, $2, $3, $4, $5, 'DangDay', $6, $7, $8, $9, $10) RETURNING *`,
+        `INSERT INTO lop (mayc, mags, manv_phancong, ngaybatdau, ngayketthucdukien, trangthai, hanxacnhan, noidung, diadiem, hinhthuchoc, hocphimoibuoi, tylehhgiasu)
+         VALUES ($1, $2, $3, $4, $5, 'DaPhanCong', NOW() + INTERVAL '24 hours', $6, $7, $8, $9, $10) RETURNING *`,
         [mayc, parsedMaGS, manv, start, ngaykethucdukien || null, noidung || null, diadiem || null, hinhthuchoc || null, finalHocPhi, finalTyLe]
       );
       
       const malop = lopR.rows[0].malop;
       
-      const sessions = generateSessions(start, soNgayHoc, lichHocTrongTuan);
+
       
       for (const session of sessions) {
         await client.query(
@@ -98,6 +147,23 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         [manv, mayc]
       );
       
+      if (Array.isArray(lichHocTrongTuan)) {
+        for (const item of lichHocTrongTuan) {
+          let thu = 8;
+          if (item.thu && item.thu.toString() !== 'Chu Nhat') {
+            thu = parseInt(item.thu.toString().replace('Thu ', ''));
+          }
+          let caCode = 'Sang';
+          if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
+          if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';
+          
+          await client.query(
+            "UPDATE lichranh_giasu SET trangthai = 'DangDay' WHERE mags = $1 AND thutrongtuan = $2 AND cahoc = $3",
+            [parsedMaGS, thu, caCode]
+          );
+        }
+      }
+      
       await client.query('COMMIT');
       res.json({ success: true, data: lopR.rows[0], message: 'Đã ghép lớp thành công' });
     } catch (e) {
@@ -112,7 +178,7 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
   router.get('/lop', async (req, res) => {
     try {
       const r = await pool(req).query(
-        `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop
+        `SELECT l.*, mh.tenmh, gs.hoten AS tengiasu, hv.hoten AS tenhocvien, yc.caplop, yc.mahv
          FROM lop l
          JOIN yeucauhockem yc ON yc.mayc = l.mayc
          JOIN hocvien hv ON hv.mahv = yc.mahv
@@ -172,12 +238,44 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         [id]
       );
       
+      let lichHocTrongTuan;
+      try {
+        lichHocTrongTuan = typeof lop.lichhoctrongtuan === 'string' 
+          ? JSON.parse(lop.lichhoctrongtuan) 
+          : lop.lichhoctrongtuan;
+      } catch (e) {
+      }
+      if (Array.isArray(lichHocTrongTuan) && lop.mags) {
+        for (const item of lichHocTrongTuan) {
+          let thu = 8;
+          if (item.thu && item.thu.toString() !== 'Chu Nhat') {
+            thu = parseInt(item.thu.toString().replace('Thu ', ''));
+          }
+          let caCode = 'Sang';
+          if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
+          if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';
+          
+          await client.query(
+            "UPDATE lichranh_giasu SET trangthai = 'Ranh' WHERE mags = $1 AND thutrongtuan = $2 AND cahoc = $3",
+            [lop.mags, thu, caCode]
+          );
+        }
+      }
+      
       let hocphiCreated = null;
       let hoahongCreated = null;
       
       if (soBuoiTinhPhi > 0 && lop.mahv) {
-        const kyTuNgay = stats.ngay_dau || lop.ngaybatdau;
-        const kyDenNgay = stats.ngay_cuoi || new Date().toISOString().split('T')[0];
+        let kyTuNgay = stats.ngay_dau || lop.ngaybatdau;
+        let kyDenNgay = stats.ngay_cuoi || new Date().toISOString().split('T')[0];
+        
+        const startD = new Date(kyTuNgay);
+        const endD = new Date(kyDenNgay);
+        if (endD <= startD) {
+          startD.setDate(startD.getDate() + 1);
+          kyDenNgay = startD.toISOString().split('T')[0];
+        }
+
         const tongHocPhi = soBuoiTinhPhi * parseInt(lop.hocphimoibuoi);
         
         const hpR = await client.query(
@@ -234,8 +332,66 @@ module.exports = function(pool, auth, requireOps, generateSessions) {
         return res.json({ success: false, message: 'Tỷ lệ hoa hồng phải từ 0 đến 100' });
       }
       
-      await pool(req).query('UPDATE lop SET tylehhgiasu = $1 WHERE malop = $2', [parsedTyLe, id]);
-      res.json({ success: true, message: `Đã cập nhật tỷ lệ hoa hồng thành ${parsedTyLe}%` });
+      const client = await pool(req).connect();
+      try {
+        await client.query('BEGIN');
+        
+        const lopRes = await client.query('SELECT mags, hocphimoibuoi, tylehhgiasu FROM lop WHERE malop = $1', [id]);
+        if (lopRes.rows.length === 0) {
+          throw new Error('Không tìm thấy lớp học');
+        }
+        const lopInfo = lopRes.rows[0];
+        
+        // Find last billed date
+        const lastBilledQuery = await client.query('SELECT MAX(kytt_den) as last_date FROM hoahong WHERE malop = $1', [id]);
+        const lastDate = lastBilledQuery.rows[0].last_date;
+        
+        let unbilledQuery = '';
+        let unbilledParams = [id];
+        if (lastDate) {
+          unbilledQuery = "SELECT * FROM buoiday WHERE malop = $1 AND trangthai = 'DaDay' AND ngayday > $2 ORDER BY ngayday ASC";
+          unbilledParams.push(lastDate);
+        } else {
+          unbilledQuery = "SELECT * FROM buoiday WHERE malop = $1 AND trangthai = 'DaDay' ORDER BY ngayday ASC";
+        }
+        const unbilledRes = await client.query(unbilledQuery, unbilledParams);
+        
+        if (unbilledRes.rows.length > 0) {
+          const sobuoi = unbilledRes.rows.length;
+          const firstDate = unbilledRes.rows[0].ngayday.toISOString().split('T')[0];
+          let lastSessionDate = unbilledRes.rows[unbilledRes.rows.length - 1].ngayday.toISOString().split('T')[0];
+          
+          const startD = new Date(firstDate);
+          const endD = new Date(lastSessionDate);
+          if (endD <= startD) {
+            startD.setDate(startD.getDate() + 1);
+            lastSessionDate = startD.toISOString().split('T')[0];
+          }
+          
+          const tonghoahong = Math.round(sobuoi * lopInfo.hocphimoibuoi * (parseFloat(lopInfo.tylehhgiasu) / 100.0));
+          
+          await client.query(
+            `INSERT INTO hoahong (mags, malop, kytt_tu, kytt_den, sobuoidaday, hocphihvmoibuoi, tylehh, tonghoahong, trangthai)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ChuaTT')`,
+            [lopInfo.mags, id, firstDate, lastSessionDate, sobuoi, lopInfo.hocphimoibuoi, lopInfo.tylehhgiasu, tonghoahong]
+          );
+        }
+        
+        await client.query('UPDATE lop SET tylehhgiasu = $1 WHERE malop = $2', [parsedTyLe, id]);
+        
+        await client.query('COMMIT');
+        
+        let msg = `Đã cập nhật tỷ lệ hoa hồng thành ${parsedTyLe}%`;
+        if (unbilledRes.rows.length > 0) {
+          msg += ` và tự động chốt ${unbilledRes.rows.length} buổi chưa thanh toán (tỷ lệ cũ).`;
+        }
+        res.json({ success: true, message: msg });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (e) { res.json({ success: false, message: e.message }); }
   });
 

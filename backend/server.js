@@ -56,17 +56,63 @@ app.use(session({
 
 
 // Auth middleware
-function requireAuth(req, res, next) {
+// Auth middleware
+async function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
-  next();
+  try {
+    const check = await pool.query('SELECT trangthai FROM taikhoan WHERE matk = $1', [req.session.user.matk]);
+    if (!check.rows.length || check.rows[0].trangthai === 'Khoa') {
+      req.session.destroy();
+      return res.status(401).json({ success: false, message: 'Tài khoản đã bị khóa hoặc không tồn tại' });
+    }
+    next();
+  } catch(e) { res.status(500).json({ success: false, message: 'Lỗi xác thực session' }); }
 }
 function requireRole(...roles) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!req.session.user) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
     if (!roles.includes(req.session.user.vaitro)) return res.status(403).json({ success: false, message: 'Không có quyền' });
-    next();
+    try {
+      const check = await pool.query('SELECT trangthai FROM taikhoan WHERE matk = $1', [req.session.user.matk]);
+      if (!check.rows.length || check.rows[0].trangthai === 'Khoa') {
+        req.session.destroy();
+        return res.status(401).json({ success: false, message: 'Tài khoản đã bị khóa' });
+      }
+      next();
+    } catch(e) { res.status(500).json({ success: false, message: 'Lỗi xác thực session' }); }
   };
 }
+
+// Admin Logger Middleware
+async function adminLogger(req, res, next) {
+  res.on('finish', async () => {
+    if (req.session && req.session.user) {
+      if (req.path === '/nhanvien/logs') return; // Tránh loop log
+      if (req.method === 'GET') return; // Bỏ qua các thao tác chỉ xem dữ liệu (GET)
+      
+      const matk = req.session.user.matk;
+      const endpoint = req.originalUrl;
+      const method = req.method;
+      const ip = req.ip || req.connection.remoteAddress;
+      const hanhdong = method + ' ' + req.path;
+      const chitiet = { body: { ...req.body }, query: req.query, status: res.statusCode };
+      
+      // Mask passwords
+      if (chitiet.body.matkhau) chitiet.body.matkhau = '***';
+      if (chitiet.body.password) chitiet.body.password = '***';
+
+      try {
+        await pool.query(
+          "INSERT INTO LOG_TRUY_CAP (MaTK, Endpoint, Method, HanhDong, ChiTiet, IPAddress) VALUES ($1, $2, $3, $4, $5, $6)",
+          [matk, endpoint, method, hanhdong, JSON.stringify(chitiet), ip]
+        );
+      } catch (err) { console.error("Lỗi ghi log:", err); }
+    }
+  });
+  next();
+}
+
+app.use('/api', adminLogger);
 
 // ============================================================
 // AUTH ROUTES
@@ -252,8 +298,6 @@ app.post('/api/auth/verify-register-otp', async (req, res) => {
     if (existsCheck.rows.length > 0) {
       await pool.query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
       return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại. Vui lòng đăng ký lại với tên khác.' });
-    }
-
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -307,12 +351,12 @@ app.locals.bcrypt = bcrypt;
 // ============================================================
 // ROUTES - mount separate files
 // ============================================================
-app.use('/api/monhoc',    require('./routes/monhoc'));
-app.use('/api/hocvien',   require('./routes/hocvien'));
-app.use('/api/giasu',     require('./routes/giasu'));
-app.use('/api/lop',       require('./routes/lop'));
-app.use('/api/nhanvien',  require('./routes/nhanvien'));
-app.use('/api/auth',      require('./routes/auth'));
+app.use('/api/monhoc', require('./routes/monhoc'));
+app.use('/api/hocvien', require('./routes/hocvien'));
+app.use('/api/giasu', require('./routes/giasu'));
+app.use('/api/lop', require('./routes/lop'));
+app.use('/api/nhanvien', require('./routes/nhanvien'));
+app.use('/api/auth', require('./routes/auth'));
 
 // ============================================================
 // SPA FALLBACK — phục vụ index.html cho client-side routing
@@ -349,10 +393,33 @@ async function seedData() {
       await client.query("INSERT INTO giasu(matk,hoten,ngaysinh,gioitinh,cccd,sdt,trinhdohocvan,chuyennganh,kinhnghiem,khuvuc,hocphimongmuon,trangthaihoso) VALUES($1,'Gia sư Mẫu','1990-01-01','Nam','123456789012','0900000005','Đại học','Toán học',2,'Quận 1, Quận 3',200000,'DaDuyet')",[gs.rows[0].matk]);
       await client.query('COMMIT');
       console.log('Seed data thành công. Tài khoản mặc định: admin/admin123, hocvien1/admin123, giasu1/admin123, nhanvien/admin123, giamdoc/admin123');
-    } catch(e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('Seed error:', e.message); }
     finally { client.release(); }
-  } catch(e) { console.error('Seed check error:', e.message); }
+  } catch (e) { console.error('Seed check error:', e.message); }
 }
+
+// ============================================================
+// CRONJOB: TỰ ĐỘNG CHỐT CÔNG SAU 24H
+// ============================================================
+const cron = require('node-cron');
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('[Cron] Quét các buổi học chờ xác nhận quá 24h...');
+    const result = await pool.query(
+      `UPDATE buoiday 
+       SET trangthai = 'DaDay', 
+           noidung = COALESCE(noidung, '') || ' [Hệ thống tự động xác nhận sau 24h]'
+       WHERE trangthai = 'ChoXacNhan' 
+       AND thoigianxacnhan <= NOW() - INTERVAL '24 hours'
+       RETURNING mabuoi`
+    );
+    if (result.rowCount > 0) {
+      console.log(`[Cron] Đã tự động duyệt ${result.rowCount} buổi học.`);
+    }
+  } catch (err) {
+    console.error('[Cron] Lỗi tự động duyệt:', err.message);
+  }
+});
 
 // Start
 app.listen(PORT, async () => {

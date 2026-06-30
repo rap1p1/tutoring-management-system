@@ -91,6 +91,37 @@ export default function SupportTab(props) {
     exportFinances
   } = propsObj;
 
+  const [reqPage, setReqPage] = React.useState(1);
+  const [absPage, setAbsPage] = React.useState(1);
+  const limit = propsObj.itemsPerPage || 10;
+  const filterTextStr = propsObj.filterText || '';
+
+  const renderPaginationLocal = (currentPage, setCurrentPage, totalItems) => {
+    const totalPages = Math.ceil(totalItems / limit) || 1;
+    if (totalPages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '20px' }}>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>&larr; Trước</button>
+        <span style={{ fontSize: '14px', color: '#94a3b8' }}>Trang {currentPage} / {totalPages}</span>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Sau &rarr;</button>
+      </div>
+    );
+  };
+
+  const filteredReqs = (supportRequests || []).filter(s =>
+    (s.tenhocvien || '').toLowerCase().includes(filterTextStr.toLowerCase()) ||
+    (s.tengiasu || '').toLowerCase().includes(filterTextStr.toLowerCase()) ||
+    (s.tenmh || '').toLowerCase().includes(filterTextStr.toLowerCase())
+  );
+  const paginatedReqs = filteredReqs.slice((reqPage - 1) * limit, reqPage * limit);
+
+  const filteredAbs = (absences || []).filter(a =>
+    (a.tenhocvien || '').toLowerCase().includes(filterTextStr.toLowerCase()) ||
+    (a.tengiasu || '').toLowerCase().includes(filterTextStr.toLowerCase()) ||
+    (a.tenmh || '').toLowerCase().includes(filterTextStr.toLowerCase())
+  );
+  const paginatedAbs = filteredAbs.slice((absPage - 1) * limit, absPage * limit);
+
   return (
     <>
       {
@@ -101,21 +132,36 @@ export default function SupportTab(props) {
                   <table className="table">
                     <thead><tr><th>Ngày yêu cầu</th><th>Lớp / Môn</th><th>Người gửi</th><th>Lý do</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
                     <tbody>
-                      {supportRequests.length === 0 ? (
+                      {paginatedReqs.length === 0 ? (
                         <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có yêu cầu nào</td></tr>
-                      ) : supportRequests.map(s => (
+                      ) : paginatedReqs.map(s => (
                         <tr key={s.maycdg}>
                           <td>{new Date(s.ngayyeucau).toLocaleString('vi-VN')}</td>
                           <td>Lớp {s.malop}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{s.tenmh}</span></td>
                           <td><strong>HV:</strong> {s.tenhocvien}<br/><strong>GS:</strong> {s.tengiasu || 'Chưa có'}</td>
-                          <td style={{ maxWidth: '250px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>) : (s.lydo)}</td>
-                          <td><span className={`status-badge ${s.trangthai === 'DaXuLy' ? 'status-active' : 'status-pending'}`}>{s.trangthai === 'DaXuLy' ? 'Đã xử lý' : 'Chờ xử lý'}</span></td>
-                          <td>{s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro !== 'BGD' && (<button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg)}>Đánh dấu xử lý</button>)}</td>
+                          <td style={{ maxWidth: '250px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            <span style={{ fontWeight: 'bold', color: s.loaiyeucau === 'NghiLop' ? '#ef4444' : '#3b82f6' }}>
+                              [{s.loaiyeucau === 'NghiLop' ? 'Nghỉ học' : 'Đổi gia sư'}]
+                            </span><br />
+                            {s.lydo && s.lydo.includes('[BẤT KHẢ KHÁNG]') ? (<span style={{ color: '#ef4444', fontWeight: 'bold' }}>{s.lydo}</span>) : (s.lydo)}
+                          </td>
+                          <td>
+                            <span className={`status-badge ${s.trangthai === 'DaXuLy' ? 'status-active' : (s.trangthai === 'TuChoi' ? 'status-cancelled' : 'status-pending')}`}>
+                              {s.trangthai === 'DaXuLy' ? 'Đã xử lý' : (s.trangthai === 'TuChoi' ? 'Đã từ chối' : 'Chờ xử lý')}
+                            </span>
+                          </td>
+                          <td>{s.trangthai === 'ChoXuLy' && currentUser && currentUser.vaitro === 'NVQL' && (
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                              <button className="btn btn-xs btn-teal" onClick={() => handleResolveSupport(s.maycdg, 'approve', s.loaiyeucau)}>{s.loaiyeucau === 'NghiLop' ? 'Duyệt nghỉ' : 'Duyệt đổi'}</button>
+                              <button className="btn btn-xs btn-rose" onClick={() => handleResolveSupport(s.maycdg, 'reject', s.loaiyeucau)}>Từ chối</button>
+                            </div>
+                          )}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {renderPaginationLocal(reqPage, setReqPage, filteredReqs.length)}
               </div>
 
               <div>
@@ -124,9 +170,9 @@ export default function SupportTab(props) {
                   <table className="table">
                     <thead><tr><th>Người báo vắng</th><th>Lớp / Môn</th><th>Ngày nghỉ / Ca</th><th>Lý do chi tiết</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
                     <tbody>
-                      {absences.length === 0 ? (
+                      {paginatedAbs.length === 0 ? (
                         <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có lịch sử báo vắng</td></tr>
-                      ) : absences.map(a => {
+                      ) : paginatedAbs.map(a => {
                         const isPending = a.trangthai === 'HVXinNghi' || a.trangthai === 'GSXinNghi';
                         const isHV = a.trangthai === 'HVVangCoPhep' || a.trangthai === 'HVXinNghi';
                         
@@ -162,7 +208,7 @@ export default function SupportTab(props) {
                               <span className={`status-badge ${statusClass}`}>{statusText}</span>
                             </td>
                             <td>
-                              {isPending && currentUser && currentUser.vaitro !== 'BGD' && (
+                              {isPending && currentUser && currentUser.vaitro === 'NVQL' && (
                                 <div style={{ display: 'flex', gap: '5px' }}>
                                   <button className="btn btn-xs btn-teal" onClick={() => handleDuyetNghi(a.mabuoi, 'approve')}>Duyệt</button>
                                   <button className="btn btn-xs btn-rose" onClick={() => handleDuyetNghi(a.mabuoi, 'reject')}>Từ chối</button>
@@ -175,6 +221,7 @@ export default function SupportTab(props) {
                     </tbody>
                   </table>
                 </div>
+                {renderPaginationLocal(absPage, setAbsPage, filteredAbs.length)}
               </div>
             </div>
       }

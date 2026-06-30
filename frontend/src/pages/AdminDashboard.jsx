@@ -310,12 +310,61 @@ function AdminDashboard() {
     }
   };
 
-  const handleResolveSupport = async (id) => {
+  const handleResolveSupport = async (id, action, loaiyeucau = 'DoiGiaSu') => {
+    const actionText = action === 'approve' ? 'chấp nhận' : 'từ chối';
+    const typeText = loaiyeucau === 'NghiLop' ? 'nghỉ học' : 'đổi gia sư';
+    const result = await Swal.fire({
+      title: 'Xác nhận',
+      text: `Bạn có chắc muốn ${actionText} yêu cầu ${typeText} này?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: action === 'approve' ? '#10b981' : '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+
     try {
-      const res = await fetch(`/api/nhanvien/yeucaudoi/${id}/xuly`, { method: 'POST' });
+      const res = await fetch(`/api/nhanvien/yeucaudoi/${id}/xuly`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
       const json = await res.json();
       if (json.success) {
-        showMsg('success', 'Đã đánh dấu xử lý.');
+        showMsg('success', json.message);
+        fetchData();
+      } else {
+        showMsg('error', json.message);
+      }
+    } catch (e) {
+      showMsg('error', 'Lỗi kết nối.');
+    }
+  };
+
+  const handleCancelRequest = async (id) => {
+    const result = await Swal.fire({
+      title: 'Xác nhận hủy',
+      text: `Bạn có chắc chắn muốn từ chối/hủy yêu cầu học kèm này?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Hủy yêu cầu',
+      cancelButtonText: 'Đóng',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/nhanvien/yeucau/${id}/huy`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        showMsg('success', json.message);
         fetchData();
       } else {
         showMsg('error', json.message);
@@ -596,11 +645,93 @@ function AdminDashboard() {
     exportToExcel(exportData, 'BaoCaoTaiChinh_HocPhi');
   };
 
+  const handleChangePassword = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Đổi mật khẩu',
+      html: `
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-old" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu hiện tại">
+          <span id="toggle-old" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-new" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu mới (từ 6 ký tự)">
+          <span id="toggle-new" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-confirm" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Xác nhận mật khẩu mới">
+          <span id="toggle-confirm" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Đổi mật khẩu',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff',
+      didOpen: () => {
+        const toggleVisibility = (inputId, iconId) => {
+          const input = document.getElementById(inputId);
+          const icon = document.getElementById(iconId);
+          icon.addEventListener('click', () => {
+            if (input.type === 'password') {
+              input.type = 'text';
+              icon.innerText = '🙈';
+            } else {
+              input.type = 'password';
+              icon.innerText = '👁️';
+            }
+          });
+        };
+        toggleVisibility('swal-input-old', 'toggle-old');
+        toggleVisibility('swal-input-new', 'toggle-new');
+        toggleVisibility('swal-input-confirm', 'toggle-confirm');
+      },
+      preConfirm: () => {
+        const oldPass = document.getElementById('swal-input-old').value;
+        const newPass = document.getElementById('swal-input-new').value;
+        const confirmPass = document.getElementById('swal-input-confirm').value;
+        if (!oldPass || !newPass || !confirmPass) {
+          Swal.showValidationMessage('Vui lòng nhập đầy đủ thông tin');
+          return false;
+        }
+        if (newPass.length < 6) {
+          Swal.showValidationMessage('Mật khẩu mới phải từ 6 ký tự');
+          return false;
+        }
+        if (newPass !== confirmPass) {
+          Swal.showValidationMessage('Xác nhận mật khẩu không khớp');
+          return false;
+        }
+        return { currentPassword: oldPass, newPassword: newPass };
+      }
+    });
+
+    if (formValues) {
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formValues)
+        });
+        const json = await res.json();
+        if (json.success) {
+          Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        } else {
+          Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      } catch (e) {
+        Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    }
+  };
+
   if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Đang tải...</div>;
 
   const pendingTutorsCount = pendingTutors.filter(t => t.trangthai === 'ChoDuyet').length;
   const pendingReqsCount = requests.filter(r => r.trangthai === 'ChoGhep').length;
-  const pendingSupportCount = supportRequests.filter(r => r.trangthai === 'ChoXuLy').length + absences.filter(a => ['HVXinNghi', 'GSXinNghi'].includes(a.trangthai)).length;
+  const pendingSupportCount = currentUser && currentUser.vaitro === 'NVQL' 
+    ? supportRequests.filter(r => r.trangthai === 'ChoXuLy').length + absences.filter(a => ['HVXinNghi', 'GSXinNghi'].includes(a.trangthai)).length 
+    : 0;
 
   const renderPagination = (totalItems) => {
     const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -614,13 +745,104 @@ function AdminDashboard() {
     );
   };
 
-  const renderSearchBox = (placeholder) => (
-    <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'flex-end' }}>
+  const renderSearchBox = (placeholder, extraFilterElement = null) => (
+    <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+      {extraFilterElement}
       <input type="text" className="form-control" placeholder={placeholder} value={filterText}
         onChange={(e) => { setFilterText(e.target.value); setCurrentPage(1); }}
         style={{ maxWidth: '300px' }} />
     </div>
   );
+
+  const propsObj = {
+    openProfileModal,
+    itemsPerPage,
+    renderPagination,
+    renderSearchBox,
+    activeTab,
+    setActiveTab,
+    globalError,
+    setGlobalError,
+    globalSuccess,
+    setGlobalSuccess,
+    loading,
+    setLoading,
+    filterText,
+    setFilterText,
+    currentPage,
+    setCurrentPage,
+    profileModal,
+    setProfileModal,
+    loadingProfile,
+    setLoadingProfile,
+    stats,
+    setStats,
+    pendingTutors,
+    setPendingTutors,
+    requests,
+    setRequests,
+    classes,
+    setClasses,
+    tuitions,
+    setTuitions,
+    commissions,
+    setCommissions,
+    supportRequests,
+    setSupportRequests,
+    absences,
+    setAbsences,
+    revenueData,
+    setRevenueData,
+    accounts,
+    setAccounts,
+    profile,
+    setProfile,
+    currentUser,
+    setCurrentUser,
+    defaultTyleHH,
+    setDefaultTyleHH,
+    defaultHocPhis,
+    setDefaultHocPhis,
+    allTutors,
+    setAllTutors,
+    allStudents,
+    setAllStudents,
+    showClassDetailModal,
+    setShowClassDetailModal,
+    classDetail,
+    setClassDetail,
+    loadingDetail,
+    setLoadingDetail,
+    showClassModal,
+    setShowClassModal,
+    showCreateClassModal,
+    setShowCreateClassModal,
+    showCreateInvoiceModal,
+    setShowCreateInvoiceModal,
+    showCreateCommissionModal,
+    setShowCreateCommissionModal,
+    selectedRequest,
+    setSelectedRequest,
+    handleTabChange,
+    fetchData,
+    handleApproveTutor,
+    handleOpenClassModal,
+    handleCancelRequest,
+    formatLichHoc,
+    handleCreateClass,
+    handleConfirmTuition,
+    handleConfirmCommission,
+    handleResolveSupport,
+    handleDuyetNghi,
+    handleEndClass,
+    handleToggleLock,
+    handleToggle2FA,
+    handleOpenClassDetail,
+    handleChangeCommission,
+    exportToExcel,
+    exportClasses,
+    exportFinances
+  };
 
   return (
     <div className="view-section" style={{ display: 'block' }}>
@@ -635,12 +857,21 @@ function AdminDashboard() {
         <div className="glass-card mb-4" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Thông Tin Cá Nhân Nhân Viên</h3>
-            <button 
-              className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
-              onClick={handleToggle2FA}
-            >
-              {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                className="btn btn-sm" 
+                style={{ backgroundColor: '#475569', color: '#fff' }}
+                onClick={handleChangePassword}
+              >
+                Đổi mật khẩu
+              </button>
+              <button 
+                className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
+                onClick={handleToggle2FA}
+              >
+                {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
+              </button>
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
             <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Nhân Viên (ID)</strong> {profile.manv ? 'NV' + profile.manv.toString().padStart(6, '0') : ''}</div>
@@ -705,7 +936,7 @@ function AdminDashboard() {
           </div>
         )}
 
-        {currentUser && currentUser.vaitro === 'BGD' && (
+        {currentUser && (currentUser.vaitro === 'BGD' || currentUser.vaitro === 'SA') && (
           <div className={`stats-card${activeTab === 'settings' ? ' active-card' : ''}`} onClick={() => handleTabChange('settings')} style={{ cursor: 'pointer', border: activeTab === 'settings' ? '2px solid #94a3b8' : '1px solid rgba(255,255,255,0.05)' }}>
             <div className="stats-icon" style={{ color: '#94a3b8' }}><Settings size={24} /></div>
             <div className="stats-info"><span className="stats-label">Cấu Hình Hệ Thống</span><span className="stats-value">Cài đặt</span></div>
@@ -850,6 +1081,7 @@ function AdminDashboard() {
       {/* Finance Modals */}
       {showCreateInvoiceModal && (
         <TuitionInvoiceModal 
+          classes={classes}
           onClose={() => setShowCreateInvoiceModal(false)}
           onSuccess={() => {
             setShowCreateInvoiceModal(false);
@@ -860,6 +1092,7 @@ function AdminDashboard() {
       
       {showCreateCommissionModal && (
         <SalaryInvoiceModal 
+          classes={classes}
           onClose={() => setShowCreateCommissionModal(false)}
           onSuccess={() => {
             setShowCreateCommissionModal(false);
@@ -885,98 +1118,24 @@ function AdminDashboard() {
             </div>
             
             {(() => {
-              const sortedTutors = [...allTutors].map(gs => {
+              const reqMaMH = parseInt(selectedRequest?.mamh);
+              const reqTenMH = selectedRequest?.tenmh;
+              const sortedTutors = [...allTutors].filter(gs => {
+                if (gs.trangthaihoso !== 'DaDuyet') return false;
+                if (!reqMaMH) return true; // fallback
+                
+                // Safely compare IDs regardless of string/number type
+                const hasRegistered = gs.registered_subjects && 
+                  gs.registered_subjects.some(id => parseInt(id) === reqMaMH);
+                  
+                const isMajorMatch = gs.chuyennganh === reqTenMH;
+                return hasRegistered || isMajorMatch;
+              }).map(gs => {
                 const matchCount = getMatchCount(selectedRequest?.lichhoctrongtuan, gs.lichranh);
                 return { ...gs, matchCount };
               }).sort((a, b) => b.matchCount - a.matchCount);
 
-              
-  const propsObj = {
-    activeTab,
-    setActiveTab,
-    globalError,
-    setGlobalError,
-    globalSuccess,
-    setGlobalSuccess,
-    loading,
-    setLoading,
-    filterText,
-    setFilterText,
-    currentPage,
-    setCurrentPage,
-    profileModal,
-    setProfileModal,
-    loadingProfile,
-    setLoadingProfile,
-    stats,
-    setStats,
-    pendingTutors,
-    setPendingTutors,
-    requests,
-    setRequests,
-    classes,
-    setClasses,
-    tuitions,
-    setTuitions,
-    commissions,
-    setCommissions,
-    supportRequests,
-    setSupportRequests,
-    absences,
-    setAbsences,
-    revenueData,
-    setRevenueData,
-    accounts,
-    setAccounts,
-    profile,
-    setProfile,
-    currentUser,
-    setCurrentUser,
-    defaultTyleHH,
-    setDefaultTyleHH,
-    defaultHocPhis,
-    setDefaultHocPhis,
-    allTutors,
-    setAllTutors,
-    allStudents,
-    setAllStudents,
-    showClassDetailModal,
-    setShowClassDetailModal,
-    classDetail,
-    setClassDetail,
-    loadingDetail,
-    setLoadingDetail,
-    showClassModal,
-    setShowClassModal,
-    showCreateClassModal,
-    setShowCreateClassModal,
-    showCreateInvoiceModal,
-    setShowCreateInvoiceModal,
-    showCreateCommissionModal,
-    setShowCreateCommissionModal,
-    selectedRequest,
-    setSelectedRequest,
-    handleTabChange,
-    fetchData,
-    handleApproveTutor,
-    handleOpenClassModal,
-    formatLichHoc,
-    handleCreateClass,
-    handleConfirmTuition,
-    handleConfirmCommission,
-    handleResolveSupport,
-    handleDuyetNghi,
-    handleEndClass,
-    handleToggleLock,
-    handleToggle2FA,
-    handleOpenClassDetail,
-    handleChangeCommission,
-    exportToExcel,
-    exportClasses,
-    exportData,
-    exportFinances
-  };
-return (
+              return (
                 <form onSubmit={handleCreateClass}>
                   <div className="form-group">
                     <label>Mã Yêu Cầu</label>
@@ -1055,12 +1214,12 @@ return (
                     <div><strong>Học phí:</strong> {parseInt(classDetail.info.hocphimoibuoi).toLocaleString()}đ/buổi</div>
                     <div>
                       <strong>Tỷ lệ HH GS:</strong> {classDetail.info.tylehhgiasu}%
-                      {currentUser && currentUser.vaitro === 'BGD' && (
+                      {currentUser && (currentUser.vaitro === 'BGD' || currentUser.vaitro === 'SA') && (
                         <button className="btn btn-xs btn-primary" style={{marginLeft:'8px'}} onClick={() => handleChangeCommission(classDetail.info.malop)}>Sửa</button>
                       )}
                     </div>
                     <div><strong>Ngày bắt đầu:</strong> {classDetail.info.ngaybatdau ? new Date(classDetail.info.ngaybatdau).toLocaleDateString('vi-VN') : 'N/A'}</div>
-                    <div><strong>Số buổi đã học:</strong> {classDetail.info.songayhoc !== undefined ? classDetail.info.songayhoc : 'N/A'}</div>
+                    <div><strong>Số buổi/tuần:</strong> {classDetail.info.songayhoc !== undefined ? classDetail.info.songayhoc : 'N/A'}</div>
                     <div style={{ gridColumn: 'span 2' }}><strong>Lịch học:</strong> {formatLichHoc(classDetail.info.lichhoctrongtuan)}</div>
                   </div>
                 </div>

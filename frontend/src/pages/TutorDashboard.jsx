@@ -22,6 +22,22 @@ function TutorDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedDistricts, setSelectedDistricts] = useState([]);
 
+  const [classPage, setClassPage] = useState(1);
+  const [commissionPage, setCommissionPage] = useState(1);
+  const itemsPerPage = 5;
+
+  const renderPagination = (currentPage, setCurrentPage, totalItems) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    if (totalPages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '15px' }}>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>&larr;</button>
+        <span style={{ fontSize: '13px' }}>Trang {currentPage}/{totalPages}</span>
+        <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>&rarr;</button>
+      </div>
+    );
+  };
+
   const handleDistrictChange = (e) => {
     const value = e.target.value;
     if (e.target.checked) {
@@ -235,9 +251,12 @@ function TutorDashboard() {
       const json = await res.json();
       if (json.success) {
         setClassSessions(json.data || []);
+      } else {
+        setGlobalError(`Lỗi tải lịch dạy: ${json.message}`);
       }
     } catch (e) {
       console.error(e);
+      setGlobalError(`Lỗi kết nối khi tải lịch dạy: ${e.message}`);
     } finally {
       setLoadingSessions(false);
     }
@@ -504,6 +523,139 @@ function TutorDashboard() {
     cells.push({ isPadding: false, day, dateStr, daySessions, key: `day-${day}` });
   }
 
+  const handleAcceptClass = async (classId) => {
+    const result = await Swal.fire({
+      title: 'Nhận lớp',
+      text: 'Bạn xác nhận sẽ nhận dạy lớp này?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/giasu/lop/${classId}/nhan`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        fetchData();
+      } else {
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    } catch (e) {
+      Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
+  };
+
+  const handleRejectClass = async (classId) => {
+    const result = await Swal.fire({
+      title: 'Từ chối lớp',
+      text: 'Bạn có chắc chắn muốn từ chối lớp này? Lớp sẽ được chuyển cho gia sư khác.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: 'Từ chối',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff'
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/giasu/lop/${classId}/tuchoi`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        fetchData();
+      } else {
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    } catch (e) {
+      Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
+  };
+
+  const handleChangePassword = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Đổi mật khẩu',
+      html: `
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-old" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu hiện tại">
+          <span id="toggle-old" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-new" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Mật khẩu mới (từ 6 ký tự)">
+          <span id="toggle-new" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+        <div style="position: relative; max-width: 85%; margin: 10px auto;">
+          <input id="swal-input-confirm" type="password" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; padding-right: 40px;" placeholder="Xác nhận mật khẩu mới">
+          <span id="toggle-confirm" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 18px;">👁️</span>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Đổi mật khẩu',
+      cancelButtonText: 'Hủy',
+      background: '#1e293b',
+      color: '#fff',
+      didOpen: () => {
+        const toggleVisibility = (inputId, iconId) => {
+          const input = document.getElementById(inputId);
+          const icon = document.getElementById(iconId);
+          icon.addEventListener('click', () => {
+            if (input.type === 'password') {
+              input.type = 'text';
+              icon.innerText = '🙈';
+            } else {
+              input.type = 'password';
+              icon.innerText = '👁️';
+            }
+          });
+        };
+        toggleVisibility('swal-input-old', 'toggle-old');
+        toggleVisibility('swal-input-new', 'toggle-new');
+        toggleVisibility('swal-input-confirm', 'toggle-confirm');
+      },
+      preConfirm: () => {
+        const oldPass = document.getElementById('swal-input-old').value;
+        const newPass = document.getElementById('swal-input-new').value;
+        const confirmPass = document.getElementById('swal-input-confirm').value;
+        if (!oldPass || !newPass || !confirmPass) {
+          Swal.showValidationMessage('Vui lòng nhập đầy đủ thông tin');
+          return false;
+        }
+        if (newPass.length < 6) {
+          Swal.showValidationMessage('Mật khẩu mới phải từ 6 ký tự');
+          return false;
+        }
+        if (newPass !== confirmPass) {
+          Swal.showValidationMessage('Xác nhận mật khẩu không khớp');
+          return false;
+        }
+        return { currentPassword: oldPass, newPassword: newPass };
+      }
+    });
+
+    if (formValues) {
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formValues)
+        });
+        const json = await res.json();
+        if (json.success) {
+          Swal.fire({ title: 'Thành công', text: json.message, icon: 'success', background: '#1e293b', color: '#fff' });
+        } else {
+          Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
+        }
+      } catch (e) {
+        Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
+      }
+    }
+  };
+
   if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Đang tải...</div>;
   if (!profile) return null;
 
@@ -541,12 +693,20 @@ function TutorDashboard() {
           <div className="glass-card mb-4">
             <div className="card-header justify-between">
               <h3>Thông Tin Hồ Sơ</h3>
-              <button 
-                className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
-                onClick={handleToggle2FA}
-              >
-                {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-sm btn-secondary" 
+                  onClick={handleChangePassword}
+                >
+                  Đổi mật khẩu
+                </button>
+                <button 
+                  className={`btn btn-sm ${profile.is2faenabled ? 'btn-rose' : 'btn-teal'}`} 
+                  onClick={handleToggle2FA}
+                >
+                  {profile.is2faenabled ? 'Tắt 2FA' : 'Bật 2FA'}
+                </button>
+              </div>
             </div>
             <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
               <div><strong style={{color:'#94a3b8', display:'block', fontSize:'12px'}}>Mã Gia Sư (ID)</strong> {profile.mags ? 'GS' + profile.mags.toString().padStart(6, '0') : ''}</div>
@@ -579,32 +739,49 @@ function TutorDashboard() {
                     {classes.length === 0 ? (
                       <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa nhận lớp nào</td></tr>
                     ) : (
-                      classes.map(c => (
+                      classes.slice((classPage - 1) * itemsPerPage, classPage * itemsPerPage).map(c => (
                         <tr key={c.malop}>
                           <td>{c.malop}</td>
                           <td>{c.tenmh} ({c.caplop})</td>
                           <td>{c.tenhocvien}</td>
                           <td>{c.songayhoc || '?'} ngày</td>
                           <td>
-                            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                              <button 
-                                className="btn btn-xs btn-teal" 
-                                disabled={profile.trangthaihoso !== 'DaDuyet'} 
-                                onClick={() => handleOpenCalendar(c.malop)}
-                                style={profile.trangthaihoso !== 'DaDuyet' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                              >
-                                📅 Lịch dạy & Ghi nhận
-                              </button>
-                              <button className="btn btn-xs btn-rose" onClick={() => { setSelectedClassId(c.malop); setShowResignModal(true); }}>
-                                Xin nghỉ
-                              </button>
-                            </div>
+                            {c.trangthai === 'DaPhanCong' ? (
+                              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', flexDirection: 'column' }}>
+                                <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '4px' }}>
+                                  ⏳ Chờ xác nhận {c.hanxacnhan ? `(Hạn: ${new Date(c.hanxacnhan).toLocaleString('vi-VN')})` : ''}
+                                </div>
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                  <button className="btn btn-xs btn-primary" onClick={() => handleAcceptClass(c.malop)}>
+                                    <CheckCircle size={14} style={{marginRight: '4px'}}/> Nhận lớp
+                                  </button>
+                                  <button className="btn btn-xs btn-rose" onClick={() => handleRejectClass(c.malop)}>
+                                    <XCircle size={14} style={{marginRight: '4px'}}/> Từ chối
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                                <button 
+                                  className="btn btn-xs btn-teal" 
+                                  disabled={profile.trangthaihoso !== 'DaDuyet'} 
+                                  onClick={() => handleOpenCalendar(c.malop)}
+                                  style={profile.trangthaihoso !== 'DaDuyet' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                >
+                                  📅 Lịch dạy & Ghi nhận
+                                </button>
+                                <button className="btn btn-xs btn-rose" onClick={() => { setSelectedClassId(c.malop); setShowResignModal(true); }}>
+                                  Xin nghỉ
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
+                {renderPagination(classPage, setClassPage, classes.length)}
               </div>
             </div>
           </div>
@@ -663,19 +840,22 @@ function TutorDashboard() {
               {commissions.length === 0 ? (
                 <p>Chưa có khoản hoa hồng nào.</p>
               ) : (
-                commissions.map(c => (
-                  <div key={c.mahh} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <strong>{c.tenmh}</strong>
-                      <span className={c.trangthai === 'DaTT' ? 'text-teal' : 'text-amber'}>
-                        {Number(c.tonghoahong || 0).toLocaleString()}đ
-                      </span>
+                <>
+                  {commissions.slice((commissionPage - 1) * itemsPerPage, commissionPage * itemsPerPage).map(c => (
+                    <div key={c.mahh} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <strong>{c.tenmh}</strong>
+                        <span className={c.trangthai === 'DaTT' ? 'text-teal' : 'text-amber'}>
+                          {Number(c.tonghoahong || 0).toLocaleString()}đ
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        {c.sobuoidaday || 0} buổi × {Number(c.hocphihvmoibuoi || 0).toLocaleString()}đ × {c.tylehh || 0}%
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {c.sobuoidaday || 0} buổi × {Number(c.hocphihvmoibuoi || 0).toLocaleString()}đ × {c.tylehh || 0}%
-                    </div>
-                  </div>
-                ))
+                  ))}
+                  {renderPagination(commissionPage, setCommissionPage, commissions.length)}
+                </>
               )}
             </div>
           </div>
@@ -722,11 +902,9 @@ function TutorDashboard() {
             <div className="form-group">
               <label>Chuyên ngành *</label>
               <select name="chuyennganh" defaultValue={profile.chuyennganh} required>
-                <option value="Sư phạm Toán">Sư phạm Toán</option>
-                <option value="Sư phạm Ngữ Văn">Sư phạm Ngữ Văn</option>
-                <option value="Sư phạm Tiếng Anh">Sư phạm Tiếng Anh</option>
-                <option value="Sư phạm Vật lý">Sư phạm Vật lý</option>
-                <option value="Sư phạm Hóa học">Sư phạm Hóa học</option>
+                {allSubjects.map(s => (
+                  <option key={s.mamh} value={s.tenmh}>{s.tenmh}</option>
+                ))}
                 <option value="Khác">Khác</option>
               </select>
             </div>
@@ -906,14 +1084,6 @@ function TutorDashboard() {
               <span className="close-btn" onClick={() => { setShowCalendarModal(false); }}>&times;</span>
             </div>
             
-            {/* Legend */}
-            <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', fontSize: '12px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.3)', border: '1px solid #f59e0b', display: 'inline-block' }}></span> Chờ xác nhận</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.3)', border: '1px solid #10b981', display: 'inline-block' }}></span> Đã dạy</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', border: '1px solid #ef4444', display: 'inline-block' }}></span> Vắng có phép / GS nghỉ</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: 'rgba(100,100,100,0.2)', border: '1px solid #666', display: 'inline-block' }}></span> Đã hủy</span>
-            </div>
-
             {/* Calendar Controls */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <button className="btn btn-sm btn-secondary" onClick={handlePrevMonth}>&larr; Tháng trước</button>

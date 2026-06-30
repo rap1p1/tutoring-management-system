@@ -6,6 +6,10 @@ import * as XLSX from "xlsx";
 export default function AllStudentsTab(props) {
   const { propsObj } = props;
   const {
+    openProfileModal,
+    itemsPerPage,
+    renderPagination,
+    renderSearchBox,
     activeTab,
     setActiveTab,
     globalError,
@@ -91,18 +95,16 @@ export default function AllStudentsTab(props) {
     exportFinances
   } = propsObj;
 
+  const filteredData = allStudents.filter(s =>
+    (s.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
+    (s.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
+    (s.email || '').toLowerCase().includes(filterText.toLowerCase())
+  );
+  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <>
-      {
-        () => {
-            const filteredData = allStudents.filter(s =>
-              (s.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (s.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (s.email || '').toLowerCase().includes(filterText.toLowerCase())
-            );
-            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-            return (
-              <div className="table-responsive">
+      <div className="table-responsive">
                 {renderSearchBox("Tìm theo tên, SĐT, email...")}
                 <table className="table">
                   <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Email</th><th>Địa chỉ</th><th>Cấp học</th><th></th></tr></thead>
@@ -125,9 +127,6 @@ export default function AllStudentsTab(props) {
                 </table>
                 {renderPagination(filteredData.length)}
               </div>
-            );
-          }
-      }
     </>
   );
 }

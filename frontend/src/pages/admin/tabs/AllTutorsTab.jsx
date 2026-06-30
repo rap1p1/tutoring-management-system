@@ -6,6 +6,10 @@ import * as XLSX from "xlsx";
 export default function AllTutorsTab(props) {
   const { propsObj } = props;
   const {
+    openProfileModal,
+    itemsPerPage,
+    renderPagination,
+    renderSearchBox,
     activeTab,
     setActiveTab,
     globalError,
@@ -91,18 +95,16 @@ export default function AllTutorsTab(props) {
     exportFinances
   } = propsObj;
 
+  const filteredData = allTutors.filter(t =>
+    (t.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
+    (t.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
+    (t.chuyennganh || '').toLowerCase().includes(filterText.toLowerCase())
+  );
+  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <>
-      {
-        () => {
-            const filteredData = allTutors.filter(t =>
-              (t.hoten || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (t.sdt || '').toLowerCase().includes(filterText.toLowerCase()) ||
-              (t.chuyennganh || '').toLowerCase().includes(filterText.toLowerCase())
-            );
-            const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-            return (
-              <div className="table-responsive">
+      <div className="table-responsive">
                 {renderSearchBox("Tìm theo tên, SĐT, chuyên ngành...")}
                 <table className="table">
                   <thead><tr><th>Họ Tên</th><th>SĐT</th><th>Chuyên ngành</th><th>Học phí (đ/buổi)</th><th>Khu vực</th><th>Trạng thái</th><th></th></tr></thead>
@@ -117,7 +119,7 @@ export default function AllTutorsTab(props) {
                           <td>{t.chuyennganh}</td>
                           <td>{parseInt(t.hocphimongmuon || 0).toLocaleString()}đ</td>
                           <td>{t.khuvucday || t.khuvuc}</td>
-                          <td><span className={`status-badge ${t.trangthai === 'DaDuyet' ? 'status-active' : 'status-pending'}`}>{t.trangthai}</span></td>
+                          <td><span className={`status-badge ${t.trangthai === 'DaDuyet' ? 'status-active' : (t.trangthai === 'TuChoi' ? 'status-cancelled' : 'status-pending')}`}>{t.trangthai}</span></td>
                           <td><button className="btn btn-xs btn-indigo" onClick={() => openProfileModal('tutor', t.mags)}>Chi tiết</button></td>
                         </tr>
                       ))
@@ -126,9 +128,6 @@ export default function AllTutorsTab(props) {
                 </table>
                 {renderPagination(filteredData.length)}
               </div>
-            );
-          }
-      }
     </>
   );
 }

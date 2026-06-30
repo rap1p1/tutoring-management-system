@@ -82,18 +82,25 @@ router.post('/:id/buoiday/:mabuoi/confirm', async (req, res) => {
       return res.json({ success: false, message: 'Buổi dạy này đã được xử lý trước đó (trạng thái: ' + buoiR.rows[0].trangthai + ')' });
     }
     
+    // KIỂM TRA CHẶN ĐIỂM DANH SỚM
+    // Lấy mốc ngày học (bỏ qua giờ phút) và so sánh với hôm nay
+    const ngaydayDate = new Date(buoiR.rows[0].ngayday);
+    ngaydayDate.setHours(0, 0, 0, 0);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (ngaydayDate > today) {
+      return res.json({ success: false, message: 'Không thể điểm danh cho buổi học ở tương lai. Vui lòng quay lại đúng ngày học để xác nhận!' });
+    }
+    
     try {
       await pool(req).query('BEGIN');
       await pool(req).query(
         "UPDATE buoiday SET trangthai = 'DaDay', thoigianxacnhan = NOW() WHERE mabuoi = $1",
         [mabuoi]
       );
-      await pool(req).query(
-        `UPDATE yeucauhockem 
-         SET songayhoc = songayhoc + 1 
-         WHERE mayc = (SELECT mayc FROM lop WHERE malop = $1)`,
-        [id]
-      );
+
       await pool(req).query('COMMIT');
       res.json({ success: true, message: 'Ghi nhận đã dạy thành công' });
     } catch (e) {

@@ -88,19 +88,48 @@ export default function AccountsTab(props) {
     exportToExcel,
     exportClasses,
     exportData,
-    exportFinances
+    exportFinances,
+    itemsPerPage,
+    renderSearchBox,
+    renderPagination
   } = propsObj;
+
+  const [statusFilter, setStatusFilter] = React.useState('all');
+
+  const filteredData = accounts.filter(acc => {
+    const matchText = !filterText || 
+      (acc.tendangnhap && acc.tendangnhap.toLowerCase().includes(filterText.toLowerCase())) ||
+      (acc.hoten && acc.hoten.toLowerCase().includes(filterText.toLowerCase())) ||
+      (acc.email && acc.email.toLowerCase().includes(filterText.toLowerCase()));
+    
+    let matchStatus = true;
+    if (statusFilter !== 'all') {
+      matchStatus = acc.trangthai === statusFilter;
+    }
+    return matchText && matchStatus;
+  });
+
+  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const statusDropdown = (
+    <select className="form-control" style={{ width: '150px' }} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}>
+      <option value="all">Tất cả trạng thái</option>
+      <option value="HoatDong">Hoạt động</option>
+      <option value="Khoa">Đã khóa</option>
+    </select>
+  );
 
   return (
     <>
       {
         <div className="table-responsive">
+              {renderSearchBox && renderSearchBox('Tìm theo tên, username, email...', statusDropdown)}
               <table className="table">
                 <thead><tr><th>Họ Tên</th><th>Tên Đăng Nhập</th><th>Email</th><th>Vai Trò</th><th>Trạng Thái</th><th>Hành Động</th></tr></thead>
                 <tbody>
-                  {accounts.length === 0 ? (
-                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không có tài khoản nào</td></tr>
-                  ) : accounts.map(acc => (
+                  {paginatedData.length === 0 ? (
+                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không tìm thấy tài khoản nào</td></tr>
+                  ) : paginatedData.map(acc => (
                     <tr key={acc.matk}>
                       <td><strong>{acc.hoten || 'Chưa cập nhật'}</strong></td>
                       <td>{acc.tendangnhap}</td>
@@ -124,6 +153,7 @@ export default function AccountsTab(props) {
                   ))}
                 </tbody>
               </table>
+              {renderPagination && renderPagination(filteredData.length)}
             </div>
       }
     </>

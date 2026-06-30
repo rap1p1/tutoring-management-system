@@ -59,5 +59,75 @@ module.exports = function(pool, auth) {
     } catch (e) { res.json({ success: false, message: e.message }); }
   });
 
+  // Lấy logs truy cập hệ thống (Chỉ dành cho Admin/Ban Giám Đốc)
+  router.get('/access-logs', async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const offset = (page - 1) * limit;
+      
+      const role = req.query.role;
+      const fromDate = req.query.fromDate;
+      const toDate = req.query.toDate;
+
+      let whereClauses = [];
+      let values = [];
+      let paramIdx = 1;
+
+      if (role) {
+        whereClauses.push(`t.VaiTro = $${paramIdx++}`);
+        values.push(role);
+      }
+      
+      if (fromDate) {
+        whereClauses.push(`l.ThoiGian >= $${paramIdx++}`);
+        values.push(fromDate);
+      }
+      
+      if (toDate) {
+        // Cộng thêm 1 ngày để bao gồm cả ngày kết thúc
+        whereClauses.push(`l.ThoiGian < $${paramIdx++}::date + interval '1 day'`);
+        values.push(toDate);
+      }
+
+      const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+      const fromStr = `
+        FROM LOG_TRUY_CAP l
+        JOIN TAIKHOAN t ON l.MaTK = t.MaTK
+        LEFT JOIN NHANVIEN n ON t.MaTK = n.MaTK
+        LEFT JOIN GIASU gs ON t.MaTK = gs.MaTK
+        LEFT JOIN HOCVIEN hv ON t.MaTK = hv.MaTK
+      `;
+
+      const countRes = await pool(req).query(`SELECT COUNT(*) ${fromStr} ${whereStr}`, values);
+      const total = parseInt(countRes.rows[0].count);
+
+      values.push(limit, offset);
+      const queryStr = `
+        SELECT l.*, 
+               t.TenDangNhap, 
+               COALESCE(n.HoTen, gs.HoTen, hv.HoTen) as NguoiThucHien
+        ${fromStr}
+        ${whereStr}
+        ORDER BY l.ThoiGian DESC
+        LIMIT $${paramIdx++} OFFSET $${paramIdx}
+      `;
+      const r = await pool(req).query(queryStr, values);
+      
+      res.json({
+        success: true,
+        data: r.rows,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
+    } catch (e) {
+      res.json({ success: false, message: e.message });
+    }
+  });
+
   return router;
 };

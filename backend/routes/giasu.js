@@ -252,6 +252,40 @@ router.post('/verify-register-otp', async (req, res) => {
   }
 });
 
+// Lấy danh sách gia sư công khai (cho khách chưa đăng nhập)
+router.get('/public', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        mags, hoten, ngaysinh, gioitinh, trinhdohocvan, chuyennganh, 
+        kinhnghiem, khuvuc, hocphimongmuon, anhdaidien, diemtrungbinh
+      FROM giasu 
+      WHERE trangthaihoso = 'DaDuyet'
+      ORDER BY mags DESC
+    `;
+    const result = await pool(req).query(query);
+    
+    // Masking/Formatting for public view
+    const publicTutors = result.rows.map(gs => {
+      let age = null;
+      if (gs.ngaysinh) {
+        const birthYear = new Date(gs.ngaysinh).getFullYear();
+        const currentYear = new Date().getFullYear();
+        age = currentYear - birthYear;
+      }
+      return {
+        ...gs,
+        ngaysinh: undefined, // Xóa ngày sinh chi tiết
+        tuoi: age // Chỉ trả về tuổi
+      };
+    });
+
+    res.json({ success: true, data: publicTutors });
+  } catch (e) { 
+    res.json({ success: false, message: e.message }); 
+  }
+});
+
 // Lấy thông tin hồ sơ của chính gia sư đang đăng nhập
 router.get('/me', async (req, res) => {
   if (!auth(req)) return res.json({ success: false, message: 'Chưa đăng nhập' });
@@ -398,6 +432,80 @@ router.get('/lop', async (req, res) => {
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
+// Gia sư xác nhận nhận lớp
+router.post('/lop/:id/nhan', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  try {
+    const { id } = req.params;
+    const gsR = await pool(req).query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
+    if (!gsR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ' });
+    const mags = gsR.rows[0].mags;
+
+    const lopR = await pool(req).query("SELECT trangthai FROM lop WHERE malop = $1 AND mags = $2", [id, mags]);
+    if (!lopR.rows.length) return res.json({ success: false, message: 'Lớp không tồn tại hoặc không thuộc về bạn' });
+    if (lopR.rows[0].trangthai !== 'DaPhanCong') return res.json({ success: false, message: 'Lớp không ở trạng thái chờ xác nhận' });
+
+    await pool(req).query("UPDATE lop SET trangthai = 'DangDay', hanxacnhan = NULL WHERE malop = $1", [id]);
+    res.json({ success: true, message: 'Xác nhận nhận lớp thành công!' });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+// Gia sư từ chối lớp
+router.post('/lop/:id/tuchoi', async (req, res) => {
+  if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
+  const client = await pool(req).connect();
+  try {
+    const { id } = req.params;
+    const gsR = await client.query('SELECT mags FROM giasu WHERE matk = $1', [auth(req).matk]);
+    if (!gsR.rows.length) { client.release(); return res.json({ success: false, message: 'Không tìm thấy hồ sơ' }); }
+    const mags = gsR.rows[0].mags;
+
+    const lopR = await client.query("SELECT trangthai, mayc FROM lop WHERE malop = $1 AND mags = $2", [id, mags]);
+    if (!lopR.rows.length) { client.release(); return res.json({ success: false, message: 'Lớp không tồn tại hoặc không thuộc về bạn' }); }
+    if (lopR.rows[0].trangthai !== 'DaPhanCong') { client.release(); return res.json({ success: false, message: 'Lớp không ở trạng thái chờ xác nhận' }); }
+
+    await client.query('BEGIN');
+    
+    // Xóa hoàn toàn lớp học nháp này để Admin ghép lại từ đầu
+    await client.query("DELETE FROM lop WHERE malop = $1", [id]);
+    
+    // Đẩy yêu cầu học kèm về ChoGhep
+    await client.query("UPDATE yeucauhockem SET trangthai = 'ChoGhep' WHERE mayc = $1", [lopR.rows[0].mayc]);
+
+    // Giải phóng lịch rảnh
+    const ycR = await client.query("SELECT lichhoctrongtuan FROM yeucauhockem WHERE mayc = $1", [lopR.rows[0].mayc]);
+    if (ycR.rows.length) {
+      let lichHocTrongTuan;
+      try {
+        lichHocTrongTuan = typeof ycR.rows[0].lichhoctrongtuan === 'string' 
+          ? JSON.parse(ycR.rows[0].lichhoctrongtuan) 
+          : ycR.rows[0].lichhoctrongtuan;
+      } catch (e) {}
+      if (Array.isArray(lichHocTrongTuan)) {
+        for (const item of lichHocTrongTuan) {
+          let thu = 8;
+          if (item.thu && item.thu.toString() !== 'Chu Nhat') thu = parseInt(item.thu.toString().replace('Thu ', ''));
+          let caCode = 'Sang';
+          if (item.ca === 'Chiều' || item.ca === 'Chieu') caCode = 'Chieu';
+          if (item.ca === 'Tối' || item.ca === 'Toi') caCode = 'Toi';
+          await client.query(
+            "UPDATE lichranh_giasu SET trangthai = 'Ranh' WHERE mags = $1 AND thutrongtuan = $2 AND cahoc = $3",
+            [mags, thu, caCode]
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Từ chối lớp thành công, lớp đã được trả về trạng thái chờ ghép.' });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.json({ success: false, message: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Lấy danh sách hoa hồng của gia sư
 router.get('/hoahong', async (req, res) => {
   if (!auth(req) || auth(req).vaitro !== 'GS') return res.json({ success: false, message: 'Không có quyền' });
@@ -457,6 +565,17 @@ router.post('/xinnghibuoi', async (req, res) => {
       return res.json({ success: false, message: 'Ca học không hợp lệ' });
     }
     
+    // KIỂM TRA CHẶN XIN NGHỈ SÁT GIỜ (Yêu cầu báo trước 1 ngày)
+    const ngaydayDate = new Date(ngayday);
+    ngaydayDate.setHours(0, 0, 0, 0);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (ngaydayDate <= today) {
+      return res.json({ success: false, message: 'Chỉ có thể xin nghỉ trước ngày học ít nhất 1 ngày. Vui lòng liên hệ trực tiếp Admin nếu có việc gấp!' });
+    }
+    
     // Kiểm tra xem buổi đó đã tồn tại chưa (trạng thái ChoXacNhan)
     const existingSession = await pool(req).query(
       "SELECT mabuoi, trangthai FROM buoiday WHERE malop = $1 AND ngayday = $2 AND cahoc = $3",
@@ -476,11 +595,7 @@ router.post('/xinnghibuoi', async (req, res) => {
       }
     }
     
-    await pool(req).query(
-      "INSERT INTO buoiday(malop, ngayday, cahoc, trangthai, noidung) VALUES($1, $2, $3, 'GSXinNghi', $4)",
-      [malop, ngayday, cahoc, lydo]
-    );
-    res.json({ success: true, message: 'Đã gửi yêu cầu xin nghỉ dạy thành công, vui lòng chờ duyệt!' });
+    return res.json({ success: false, message: 'Ngày/Ca học không tồn tại trong lịch trình' });
   } catch (e) { 
     if (e.code === '23505') return res.json({ success: false, message: 'Buổi học trùng lặp' });
     res.json({ success: false, message: e.message }); 
