@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { uploadToS3, deleteFromS3 } = require('../utils/s3');
+const { sendEmail } = require('../utils/mailer');
 
 function pool(req) { return req.app.locals.pool; }
 function auth(req) { return req.session.user; }
@@ -62,13 +63,14 @@ async function deleteOldImage(oldPath) {
 }
 
 
-// Đăng ký tài khoản Gia Sư mới
+// Đăng ký tài khoản Gia Sư mới (Bước 1: gửi OTP xác minh email)
 router.post('/register', async (req, res) => {
   try {
     const { username, password, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien } = req.body;
     if (!username || !password || !hoten || !ngaysinh || !gioitinh || !cccd || !sdt || !trinhdohocvan || !chuyennganh || !khuvuc || !hocphimongmuon) {
       return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
     }
+    if (!email) return res.json({ success: false, message: 'Email là bắt buộc để xác minh tài khoản' });
 
     if (!anhcccd) {
       return res.json({ success: false, message: 'Ảnh CCCD là minh chứng bắt buộc' });
@@ -81,7 +83,7 @@ router.post('/register', async (req, res) => {
     if (password.length < 6) return res.json({ success: false, message: 'Mật khẩu phải từ 6 ký tự trở lên' });
     if (!/^\d{12}$/.test(cccd)) return res.json({ success: false, message: 'CCCD phải bao gồm đúng 12 chữ số' });
     if (!/^\d{10,11}$/.test(sdt)) return res.json({ success: false, message: 'Số điện thoại không hợp lệ' });
-    if (email && !email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải có đuôi @gmail.com' });
+    if (!email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải có đuôi @gmail.com' });
     if (parseInt(hocphimongmuon) <= 50000) return res.json({ success: false, message: 'Học phí mong muốn phải lớn hơn 50,000đ' });
     if (parseInt(kinhnghiem) < 0) return res.json({ success: false, message: 'Kinh nghiệm không hợp lệ' });
     
@@ -95,15 +97,123 @@ router.post('/register', async (req, res) => {
     const cccdExists = await pool(req).query('SELECT mags FROM giasu WHERE cccd = $1', [cccd]);
     if (cccdExists.rows.length > 0) return res.json({ success: false, message: 'Số CCCD đã được đăng ký' });
 
-    const bcrypt = req.app.locals.bcrypt;
-    const hash = await bcrypt.hash(password, 10);
-    const client = await pool(req).connect();
+    // Kiểm tra email đã được sử dụng chưa
+    const emailExists = await pool(req).query('SELECT matk FROM taikhoan WHERE email = $1', [email]);
+    if (emailExists.rows.length > 0) return res.json({ success: false, message: 'Email này đã được sử dụng' });
 
+    // Rate limit OTP
+    const recentOtp = await pool(req).query(
+      `SELECT maotpreg FROM otp_register 
+       WHERE email = $1 AND loaitk = 'GS' AND ngaytao > NOW() - INTERVAL '1 minute' AND dasudung = FALSE`,
+      [email]
+    );
+    if (recentOtp.rows.length > 0) {
+      return res.json({ success: false, message: 'Vui lòng chờ 1 phút trước khi gửi lại mã OTP' });
+    }
+
+    // Tạo OTP 6 số
+    const bcrypt = req.app.locals.bcrypt;
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Lưu thông tin đăng ký tạm (bao gồm ảnh base64)
+    const regData = JSON.stringify({
+      username, passwordHash, hoten, ngaysinh, gioitinh, cccd, sdt, email,
+      trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon,
+      anhcccd, anhbangcap, anhthesinhvien, anhdaidien
+    });
+
+    await pool(req).query(
+      `INSERT INTO otp_register (email, otphash, regdata, loaitk, hethan) 
+       VALUES ($1, $2, $3, 'GS', NOW() + INTERVAL '10 minutes')`,
+      [email, otpHash, regData]
+    );
+
+    // Gửi email OTP
+    const sent = await sendEmail({
+      to: email,
+      subject: '📧 Mã OTP Xác Minh Đăng Ký Gia Sư — GiaSưConnect',
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #f8fafc; border-radius: 12px;">
+          <h2 style="color: #0f172a; text-align: center; margin-bottom: 10px;">📧 Xác minh đăng ký gia sư</h2>
+          <p style="color: #475569; text-align: center;">Xin chào <strong>${hoten}</strong>,</p>
+          <p style="color: #475569; text-align: center;">Mã OTP xác minh đăng ký của bạn là:</p>
+          <div style="text-align: center; margin: 20px 0;">
+            <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0f172a; background: #e2e8f0; padding: 12px 24px; border-radius: 8px; display: inline-block;">
+              ${otp}
+            </span>
+          </div>
+          <p style="color: #94a3b8; text-align: center; font-size: 14px;">
+            Mã này có hiệu lực trong <strong>10 phút</strong>.<br/>
+            Nếu bạn không yêu cầu đăng ký, vui lòng bỏ qua email này.
+          </p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+          <p style="color: #94a3b8; text-align: center; font-size: 12px;">GiaSưConnect — Hệ thống quản lý gia sư</p>
+        </div>
+      `
+    });
+
+    if (!sent) {
+      return res.json({ success: false, message: 'Không thể gửi email OTP. Vui lòng thử lại sau.' });
+    }
+
+    res.json({ success: true, requireOTP: true, email, message: 'Đã gửi mã OTP đến email của bạn. Vui lòng kiểm tra hộp thư.' });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Lỗi server: ' + e.message });
+  }
+});
+
+// Xác minh OTP đăng ký Gia Sư (Bước 2)
+router.post('/verify-register-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.json({ success: false, message: 'Thiếu email hoặc mã OTP' });
+
+    const otpResult = await pool(req).query(
+      `SELECT * FROM otp_register 
+       WHERE email = $1 AND loaitk = 'GS' AND hethan > NOW() AND dasudung = FALSE
+       ORDER BY ngaytao DESC LIMIT 1`,
+      [email]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.json({ success: false, message: 'Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng đăng ký lại.' });
+    }
+
+    const otpRecord = otpResult.rows[0];
+
+    if (otpRecord.solanthu >= 5) {
+      await pool(req).query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
+      return res.json({ success: false, message: 'Đã thử quá nhiều lần. Vui lòng đăng ký lại.' });
+    }
+
+    const bcrypt = req.app.locals.bcrypt;
+    const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otphash);
+    if (!isMatch) {
+      await pool(req).query('UPDATE otp_register SET solanthu = solanthu + 1 WHERE maotpreg = $1', [otpRecord.maotpreg]);
+      const remaining = 5 - (otpRecord.solanthu + 1);
+      return res.json({ success: false, message: `Mã OTP không đúng. Còn ${remaining} lần thử.` });
+    }
+
+    // OTP đúng → tạo tài khoản thật
+    const regData = otpRecord.regdata;
+    const { username, passwordHash, hoten, ngaysinh, gioitinh, cccd, sdt, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien } = regData;
+
+    // Kiểm tra lại username
+    const existsCheck = await pool(req).query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
+    if (existsCheck.rows.length > 0) {
+      await pool(req).query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
+      return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại. Vui lòng đăng ký lại.' });
+    }
+
+    const client = await pool(req).connect();
     try {
       await client.query('BEGIN');
       const tkResult = await client.query(
         "INSERT INTO taikhoan (tendangnhap, matkhau, vaitro, email) VALUES ($1, $2, 'GS', $3) RETURNING matk",
-        [username, hash, email || null]
+        [username, passwordHash, email]
       );
       const matk = tkResult.rows[0].matk;
 
@@ -115,7 +225,7 @@ router.post('/register', async (req, res) => {
       const gsResult = await client.query(
         `INSERT INTO giasu (matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, kinhnghiem, khuvuc, hocphimongmuon, anhcccd, anhbangcap, anhthesinhvien, anhdaidien) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING mags`,
-        [matk, hoten, ngaysinh, gioitinh, cccd, sdt, email || null, trinhdohocvan, chuyennganh, parseInt(kinhnghiem) || 0, khuvuc, parseInt(hocphimongmuon), anhcccdPath, anhbangcapPath, anhthesinhvienPath, anhdaidienPath]
+        [matk, hoten, ngaysinh, gioitinh, cccd, sdt, email, trinhdohocvan, chuyennganh, parseInt(kinhnghiem) || 0, khuvuc, parseInt(hocphimongmuon), anhcccdPath, anhbangcapPath, anhthesinhvienPath, anhdaidienPath]
       );
       
       const mags = gsResult.rows[0].mags;
@@ -125,8 +235,11 @@ router.post('/register', async (req, res) => {
         await client.query("UPDATE giasu SET anhdaidien = $1 WHERE mags = $2", [anhdaidienPath, mags]);
       }
 
+      // Đánh dấu OTP đã dùng
+      await client.query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
+
       await client.query('COMMIT');
-      res.json({ success: true, message: 'Đăng ký hồ sơ gia sư thành công. Vui lòng chờ trung tâm duyệt hồ sơ.' });
+      res.json({ success: true, message: 'Xác minh thành công! Đăng ký hồ sơ gia sư thành công. Vui lòng chờ trung tâm duyệt hồ sơ.' });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

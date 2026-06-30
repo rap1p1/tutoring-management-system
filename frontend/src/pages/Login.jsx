@@ -34,6 +34,14 @@ function Login() {
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const navigate = useNavigate();
 
+  // === OTP Đăng ký state ===
+  const [showRegisterOTP, setShowRegisterOTP] = useState(false);
+  const [regOtpEmail, setRegOtpEmail] = useState('');
+  const [regOtpValue, setRegOtpValue] = useState('');
+  const [regOtpError, setRegOtpError] = useState('');
+  const [regOtpLoading, setRegOtpLoading] = useState(false);
+  const [regOtpType, setRegOtpType] = useState('HV'); // 'HV' hoặc 'GS'
+
   // === Quên mật khẩu state ===
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [fpStep, setFpStep] = useState(1); // 1: email, 2: OTP, 3: new password
@@ -341,7 +349,16 @@ function Login() {
         body: JSON.stringify(data)
       });
       const json = await res.json();
-      if (json.success) {
+      if (json.requireOTP) {
+        // Hiện modal OTP
+        setRegOtpEmail(json.email);
+        setRegOtpType('HV');
+        setRegOtpValue('');
+        setRegOtpError('');
+        setShowRegisterOTP(true);
+        setFormSuccess(json.message);
+        setFormError('');
+      } else if (json.success) {
         setFormSuccess('Đăng ký học viên thành công! Vui lòng đăng nhập.');
         setFormError('');
         setActiveTab('login');
@@ -418,7 +435,16 @@ function Login() {
         body: JSON.stringify(data)
       });
       const json = await res.json();
-      if (json.success) {
+      if (json.requireOTP) {
+        // Hiện modal OTP
+        setRegOtpEmail(json.email);
+        setRegOtpType('GS');
+        setRegOtpValue('');
+        setRegOtpError('');
+        setShowRegisterOTP(true);
+        setFormSuccess(json.message);
+        setFormError('');
+      } else if (json.success) {
         setFormSuccess('Đăng ký hồ sơ gia sư thành công!');
         setFormError('');
         setActiveTab('login');
@@ -428,6 +454,111 @@ function Login() {
     } catch (err) {
       setFormError('Lỗi kết nối');
     }
+  };
+
+  // ============================================================
+  // XÁC MINH OTP ĐĂNG KÝ
+  // ============================================================
+  const handleVerifyRegisterOTP = async (e) => {
+    e.preventDefault();
+    setRegOtpError('');
+    setRegOtpLoading(true);
+    try {
+      const url = regOtpType === 'HV' ? '/api/auth/verify-register-otp' : '/api/giasu/verify-register-otp';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: regOtpEmail, otp: regOtpValue })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setShowRegisterOTP(false);
+        setFormSuccess(json.message);
+        setFormError('');
+        setActiveTab('login');
+      } else {
+        setRegOtpError(json.message);
+      }
+    } catch (err) {
+      setRegOtpError('Lỗi kết nối máy chủ');
+    } finally {
+      setRegOtpLoading(false);
+    }
+  };
+
+  const renderRegisterOTPModal = () => {
+    if (!showRegisterOTP) return null;
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+      }}>
+        <div style={{
+          background: 'linear-gradient(145deg, #1e293b, #0f172a)',
+          borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '440px',
+          border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+          position: 'relative'
+        }}>
+          {/* Nút đóng */}
+          <button
+            onClick={() => setShowRegisterOTP(false)}
+            style={{
+              position: 'absolute', top: '12px', right: '12px', background: 'none',
+              border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px'
+            }}
+          >
+            <X size={20} />
+          </button>
+
+          <h3 style={{ textAlign: 'center', color: '#f8fafc', marginBottom: '8px', fontSize: '20px' }}>
+            📧 Xác minh Email
+          </h3>
+          <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px', textAlign: 'center' }}>
+            Nhập mã OTP 6 số đã gửi đến <strong style={{ color: '#14b8a6' }}>{regOtpEmail}</strong>
+          </p>
+
+          {regOtpError && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+              border: '1px solid #ef4444', padding: '10px', borderRadius: '8px',
+              marginBottom: '16px', fontSize: '14px', textAlign: 'center'
+            }}>
+              {regOtpError}
+            </div>
+          )}
+
+          <form onSubmit={handleVerifyRegisterOTP}>
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ShieldCheck size={16} /> Mã OTP
+              </label>
+              <input
+                type="text"
+                value={regOtpValue}
+                onChange={e => setRegOtpValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="______"
+                maxLength={6}
+                required
+                style={{ letterSpacing: '8px', textAlign: 'center', fontSize: '24px', fontWeight: 'bold' }}
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn btn-teal btn-block"
+              disabled={regOtpLoading || regOtpValue.length !== 6}
+              style={{ opacity: (regOtpLoading || regOtpValue.length !== 6) ? 0.7 : 1 }}
+            >
+              {regOtpLoading ? 'Đang xác minh...' : 'Xác minh & Hoàn tất đăng ký'}
+            </button>
+          </form>
+
+          <p style={{ color: '#64748b', fontSize: '12px', textAlign: 'center', marginTop: '16px' }}>
+            Mã OTP có hiệu lực trong 10 phút. Kiểm tra cả mục Spam nếu chưa nhận được.
+          </p>
+        </div>
+      </div>
+    );
   };
 
   // ============================================================
@@ -883,6 +1014,8 @@ function Login() {
 
       {/* Forgot Password Modal */}
       {renderForgotPassword()}
+      {/* Register OTP Modal */}
+      {renderRegisterOTPModal()}
       {/* 2FA Modal */}
       {show2FAModal && (
         <div className="modal" style={{ display: 'flex' }}>
