@@ -298,6 +298,8 @@ app.post('/api/auth/verify-register-otp', async (req, res) => {
     if (existsCheck.rows.length > 0) {
       await pool.query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
       return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại. Vui lòng đăng ký lại với tên khác.' });
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
