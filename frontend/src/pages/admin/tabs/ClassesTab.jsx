@@ -97,12 +97,12 @@ export default function ClassesTab(props) {
   const [statusFilter, setStatusFilter] = React.useState('all');
 
   const filteredData = classes.filter(c => {
-    const matchText = !filterText || 
+    const matchText = !filterText ||
       (c.tenmh && c.tenmh.toLowerCase().includes(filterText.toLowerCase())) ||
       (c.caplop && c.caplop.toLowerCase().includes(filterText.toLowerCase())) ||
       (c.tenhocvien && c.tenhocvien.toLowerCase().includes(filterText.toLowerCase())) ||
       (c.tengiasu && c.tengiasu.toLowerCase().includes(filterText.toLowerCase()));
-    
+
     let matchStatus = true;
     if (statusFilter !== 'all') {
       matchStatus = c.trangthai === statusFilter;
@@ -125,46 +125,46 @@ export default function ClassesTab(props) {
     <>
       {
         <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h3 style={{ margin: 0 }}>Quản Lý Danh Sách Lớp Học</h3>
-                <button className="btn btn-secondary" onClick={exportClasses} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Download size={16} /> Xuất Excel Lớp Học
-                </button>
-              </div>
-              {renderSearchBox && renderSearchBox('Tìm theo môn, lớp, học viên, gia sư...', statusDropdown)}
-              <div className="table-responsive">
-                <table className="table">
-                <thead>
-                  <tr><th>Mã Lớp</th><th>Môn/Lớp</th><th>Học viên</th><th>Gia sư</th><th>Học phí/buổi</th><th>Trạng thái</th><th>Hành động</th></tr>
-                </thead>
-                <tbody>
-                  {paginatedData.length === 0 ? (
-                    <tr><td colSpan="7" style={{ textAlign: 'center' }}>Chưa có lớp nào</td></tr>
-                  ) : paginatedData.map(c => (
-                    <tr key={c.malop}>
-                      <td>{c.malop}</td>
-                      <td>{c.tenmh}<br/><span style={{fontSize:'12px',color:'#94a3b8'}}>{c.caplop}</span></td>
-                      <td>{c.tenhocvien}</td>
-                      <td>{c.tengiasu || 'Chưa phân công'}</td>
-                      <td>{c.hocphimoibuoi ? parseInt(c.hocphimoibuoi).toLocaleString() + 'đ' : ''}</td>
-                      <td>
-                        <span className={`status-badge ${c.trangthai === 'DangDay' ? 'status-active' : (c.trangthai === 'KetThuc' ? 'status-disabled' : 'status-pending')}`}>
-                          {c.trangthai}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassDetail(c.malop)} style={{marginRight:'5px'}}>Chi tiết</button>
-                        {c.trangthai !== 'KetThuc' && c.trangthai !== 'Huy' && currentUser && currentUser.vaitro !== 'BGD' && (
-                          <button className="btn btn-xs btn-rose" onClick={() => handleEndClass(c.malop)}>Kết thúc</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {renderPagination && renderPagination(filteredData.length)}
-            </div>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h3 style={{ margin: 0 }}>Quản Lý Danh Sách Lớp Học</h3>
+            <button className="btn btn-secondary" onClick={exportClasses} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={16} /> Xuất Excel Lớp Học
+            </button>
+          </div>
+          {renderSearchBox && renderSearchBox('Tìm theo môn, lớp, học viên, gia sư...', statusDropdown)}
+          <div className="table-responsive">
+            <table className="table">
+              <thead>
+                <tr><th>Mã Lớp</th><th>Môn/Lớp</th><th>Học viên</th><th>Gia sư</th><th>Học phí/buổi</th><th>Trạng thái</th><th>Hành động</th></tr>
+              </thead>
+              <tbody>
+                {paginatedData.length === 0 ? (
+                  <tr><td colSpan="7" style={{ textAlign: 'center' }}>Chưa có lớp nào</td></tr>
+                ) : paginatedData.map(c => (
+                  <tr key={c.malop}>
+                    <td>{c.malop}</td>
+                    <td>{c.tenmh}<br /><span style={{ fontSize: '12px', color: '#94a3b8' }}>{c.caplop}</span></td>
+                    <td>{c.tenhocvien}</td>
+                    <td>{c.tengiasu || 'Chưa phân công'}</td>
+                    <td>{c.hocphimoibuoi ? parseInt(c.hocphimoibuoi).toLocaleString() + 'đ' : ''}</td>
+                    <td>
+                      <span className={`status-badge ${c.trangthai === 'DangDay' ? 'status-active' : (c.trangthai === 'KetThuc' ? 'status-disabled' : 'status-pending')}`}>
+                        {c.trangthai}
+                      </span>
+                    </td>
+                    <td>
+                      <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassDetail(c.malop)} style={{ marginRight: '5px' }}>Chi tiết</button>
+                      {c.trangthai !== 'KetThuc' && c.trangthai !== 'Huy' && currentUser && (
+                        <button className="btn btn-xs btn-rose" onClick={() => handleEndClass(c.malop)}>Kết thúc</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {renderPagination && renderPagination(filteredData.length)}
+          </div>
+        </div>
       }
     </>
   );

@@ -98,12 +98,12 @@ export default function RequestsTab(props) {
   const [statusFilter, setStatusFilter] = React.useState('all');
 
   const filteredData = requests.filter(r => {
-    const matchText = !filterText || 
+    const matchText = !filterText ||
       (r.tenmh && r.tenmh.toLowerCase().includes(filterText.toLowerCase())) ||
       (r.caplop && r.caplop.toLowerCase().includes(filterText.toLowerCase())) ||
       (r.tenhocvien && r.tenhocvien.toLowerCase().includes(filterText.toLowerCase())) ||
       (r.sdthocvien && r.sdthocvien.toLowerCase().includes(filterText.toLowerCase()));
-    
+
     let matchStatus = true;
     if (statusFilter !== 'all') {
       matchStatus = r.trangthai === statusFilter;
@@ -126,46 +126,46 @@ export default function RequestsTab(props) {
     <>
       {
         <div className="table-responsive">
-              {renderSearchBox && renderSearchBox('Tìm theo môn, lớp, tên HV, SĐT...', statusDropdown)}
-              <table className="table">
-                <thead>
-                  <tr><th>Học viên</th><th>Môn học</th><th>Cấp lớp</th><th>Số buổi/tuần / Lịch học</th><th>Trạng thái</th><th>Hành động</th></tr>
-                </thead>
-                <tbody>
-                  {paginatedData.length === 0 ? (
-                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không tìm thấy yêu cầu nào</td></tr>
-                  ) : paginatedData.map(r => (
-                    <tr key={r.mayc}>
-                      <td><strong>{r.tenhocvien}</strong><br/>{r.sdthocvien}</td>
-                      <td>{r.tenmh}</td>
-                      <td>{r.caplop}</td>
-                      <td>
-                        <strong>Số buổi/tuần: {r.songayhoc}</strong><br/>
-                        <span style={{fontSize:'12px',color:'#94a3b8'}}>{formatLichHoc(r.lichhoctrongtuan)}</span>
-                      </td>
-                      <td>
-                        <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : (r.trangthai === 'Huy' ? 'status-cancelled' : 'status-pending')}`}>
-                          {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : (r.trangthai === 'Huy' ? 'Đã hủy' : 'Đã ghép')}
-                        </span>
-                      </td>
-                      <td>
-                        {r.trangthai === 'ChoGhep' && currentUser && currentUser.vaitro !== 'BGD' && (
-                          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                            <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassModal(r)}>
-                              Tạo Lớp & Ghép GS
-                            </button>
-                            <button className="btn btn-xs btn-rose" onClick={() => handleCancelRequest(r.mayc)}>
-                              Từ chối
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {renderPagination && renderPagination(filteredData.length)}
-            </div>
+          {renderSearchBox && renderSearchBox('Tìm theo môn, lớp, tên HV, SĐT...', statusDropdown)}
+          <table className="table">
+            <thead>
+              <tr><th>Học viên</th><th>Môn học</th><th>Cấp lớp</th><th>Số buổi/tuần / Lịch học</th><th>Trạng thái</th><th>Hành động</th></tr>
+            </thead>
+            <tbody>
+              {paginatedData.length === 0 ? (
+                <tr><td colSpan="6" style={{ textAlign: 'center' }}>Không tìm thấy yêu cầu nào</td></tr>
+              ) : paginatedData.map(r => (
+                <tr key={r.mayc}>
+                  <td><strong>{r.tenhocvien}</strong><br />{r.sdthocvien}</td>
+                  <td>{r.tenmh}</td>
+                  <td>{r.caplop}</td>
+                  <td>
+                    <strong>Số buổi/tuần: {r.songayhoc}</strong><br />
+                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatLichHoc(r.lichhoctrongtuan)}</span>
+                  </td>
+                  <td>
+                    <span className={`status-badge ${r.trangthai === 'DaGhep' ? 'status-active' : (r.trangthai === 'Huy' ? 'status-cancelled' : 'status-pending')}`}>
+                      {r.trangthai === 'ChoGhep' ? 'Chờ ghép' : (r.trangthai === 'Huy' ? 'Đã hủy' : 'Đã ghép')}
+                    </span>
+                  </td>
+                  <td>
+                    {r.trangthai === 'ChoGhep' && currentUser && (
+                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                        <button className="btn btn-xs btn-primary" onClick={() => handleOpenClassModal(r)}>
+                          Tạo Lớp & Ghép GS
+                        </button>
+                        <button className="btn btn-xs btn-rose" onClick={() => handleCancelRequest(r.mayc)}>
+                          Từ chối
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {renderPagination && renderPagination(filteredData.length)}
+        </div>
       }
     </>
   );

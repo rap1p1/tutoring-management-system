@@ -193,7 +193,7 @@ function StudentDashboard() {
 
     const lichHoc = getSelectedSchedule();
     if (lichHoc.length === 0) {
-      setModalMsg({ text: 'Vui lòng chọn ít nhất 1 buổi học trong tuần!', type: 'error' });
+      Swal.fire({ title: 'Lỗi', text: 'Vui lòng chọn ít nhất 1 buổi học trong tuần!', icon: 'error', background: '#1e293b', color: '#fff' });
       return;
     }
 
@@ -216,18 +216,15 @@ function StudentDashboard() {
       });
       const json = await res.json();
       if (json.success) {
-        setModalMsg({ text: 'Gửi yêu cầu thành công!', type: 'success' });
+        Swal.fire({ title: 'Thành công', text: 'Gửi yêu cầu thành công!', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
         fetchData();
-        setTimeout(() => {
-          setShowRequestModal(false);
-          setModalMsg({ text: '', type: '' });
-          setScheduleGrid({});
-        }, 1500);
+        setShowRequestModal(false);
+        setScheduleGrid({});
       } else {
-        setModalMsg({ text: json.message, type: 'error' });
+        Swal.fire({ title: 'Lỗi', text: json.message, icon: 'error', background: '#1e293b', color: '#fff' });
       }
     } catch (e) {
-      setModalMsg({ text: 'Lỗi kết nối', type: 'error' });
+      Swal.fire({ title: 'Lỗi', text: 'Lỗi kết nối', icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
@@ -949,18 +946,7 @@ function StudentDashboard() {
               <span className="close-btn" onClick={() => { setShowRequestModal(false); setModalMsg({ text: '', type: '' }); setScheduleGrid({}); }}>&times;</span>
             </div>
 
-            {modalMsg.text && (
-              <div style={{
-                backgroundColor: modalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                color: modalMsg.type === 'error' ? '#ef4444' : '#10b981',
-                border: `1px solid ${modalMsg.type === 'error' ? '#ef4444' : '#10b981'}`,
-                padding: '10px', borderRadius: '6px', marginBottom: '15px'
-              }}>
-                {modalMsg.text}
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginTop: '15px' }}>
               {/* Bên trái: Form */}
               <form onSubmit={handleAddRequest}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

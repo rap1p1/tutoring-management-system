@@ -77,6 +77,40 @@ router.post('/yeucau', async (req, res) => {
     const hvR = await pool(req).query('SELECT mahv FROM hocvien WHERE matk=$1', [auth(req).matk]);
     if (!hvR.rows.length) return res.json({ success: false, message: 'Không tìm thấy hồ sơ học viên' });
     const mahv = hvR.rows[0].mahv;
+
+    // KIỂM TRA TRÙNG LỊCH: Lấy danh sách lịch bận của học viên
+    const busySchedules = await pool(req).query(`
+      SELECT y.lichhoctrongtuan
+      FROM yeucauhockem y
+      LEFT JOIN lop l ON y.mayc = l.mayc
+      WHERE y.mahv = $1 
+        AND (
+          y.trangthai = 'ChoGhep' 
+          OR 
+          l.trangthai IN ('DangDay', 'DaPhanCong')
+        )
+    `, [mahv]);
+
+    const busySet = new Set();
+    for (const row of busySchedules.rows) {
+      if (!row.lichhoctrongtuan) continue;
+      try {
+        const scheds = typeof row.lichhoctrongtuan === 'string' ? JSON.parse(row.lichhoctrongtuan) : row.lichhoctrongtuan;
+        if (Array.isArray(scheds)) {
+          scheds.forEach(s => busySet.add(`${s.thu}-${s.buoi}`));
+        }
+      } catch (e) {}
+    }
+
+    for (const s of lichHoc) {
+      if (busySet.has(`${s.thu}-${s.buoi}`)) {
+        return res.json({ 
+          success: false, 
+          message: `Bạn đã có lớp đang học hoặc yêu cầu chờ ghép vào Ca ${s.buoi === 'Sang' ? 'Sáng' : s.buoi === 'Chieu' ? 'Chiều' : 'Tối'} Thứ ${s.thu}. Vui lòng chọn lịch khác!` 
+        });
+      }
+    }
+
     const r = await pool(req).query(
       `INSERT INTO yeucauhockem(mahv,mamh,caplop,hinhthuchoc,yc_gioitinhgs,yc_trinhdogs,songayhoc,lichhoctrongtuan,diachi,ghichu)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,

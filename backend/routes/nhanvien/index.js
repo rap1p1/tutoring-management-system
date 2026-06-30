@@ -36,18 +36,34 @@ function generateSessions(ngaybatdau, soNgayHoc, lichHocTrongTuan) {
   
   const maxIterations = 365;
   let iteration = 0;
+
+  // Lấy giờ hiện tại theo múi giờ Việt Nam
+  const vnTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+  const currentVNHour = vnTime.getHours();
+  const todayStr = vnTime.getFullYear() + '-' + String(vnTime.getMonth() + 1).padStart(2, '0') + '-' + String(vnTime.getDate()).padStart(2, '0');
   
   while (count < soNgayHoc && iteration < maxIterations) {
     const dayOfWeek = currentDate.getDay();
+    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
     
     for (const sched of scheduleDays) {
       if (dayOfWeek === sched.jsDay && count < soNgayHoc) {
-        const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-        sessions.push({
-          ngayday: dateStr,
-          cahoc: sched.buoi
-        });
-        count++;
+        
+        // Bỏ qua ca học đã trôi qua nếu ngày đang xét chính là hôm nay
+        let isPast = false;
+        if (dateStr === todayStr) {
+          if (sched.buoi === 'Sang' && currentVNHour >= 12) isPast = true;
+          if (sched.buoi === 'Chieu' && currentVNHour >= 18) isPast = true;
+          if (sched.buoi === 'Toi' && currentVNHour >= 21) isPast = true;
+        }
+
+        if (!isPast) {
+          sessions.push({
+            ngayday: dateStr,
+            cahoc: sched.buoi
+          });
+          count++;
+        }
       }
     }
     
