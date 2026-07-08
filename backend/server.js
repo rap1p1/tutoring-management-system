@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const path = require('path');
 const { Pool } = require('pg');
+const { sendEmail } = require('./utils/mailer');
 
 const cors = require('cors');
 const helmet = require('helmet');
@@ -181,32 +182,140 @@ app.post('/api/auth/register', registerLimiter, async (req, res) => {
   try {
     const { username, password, hoten, ngaysinh, sdt, email } = req.body;
     if (!username || !password || !hoten || !ngaysinh || !sdt) return res.json({ success: false, message: 'Thiếu thông tin bắt buộc' });
-
+    if (!email) return res.json({ success: false, message: 'Email là bắt buộc để xác minh tài khoản' });
+    
     if (password.length < 6) return res.json({ success: false, message: 'Mật khẩu phải từ 6 ký tự trở lên' });
     if (!/^\d{10,11}$/.test(sdt)) return res.json({ success: false, message: 'Số điện thoại không hợp lệ' });
-    if (email && !email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải có đuôi @gmail.com' });
-
+    if (!email.endsWith('@gmail.com')) return res.json({ success: false, message: 'Email phải có đuôi @gmail.com' });
+    
     const today = new Date().toISOString().split('T')[0];
     if (ngaysinh >= today) return res.json({ success: false, message: 'Ngày sinh phải nhỏ hơn ngày hiện tại' });
 
     const exists = await pool.query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
     if (exists.rows.length > 0) return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại' });
+    
+    // Kiểm tra email đã được sử dụng chưa
+    const emailExists = await pool.query('SELECT matk FROM taikhoan WHERE email = $1', [email]);
+    if (emailExists.rows.length > 0) return res.json({ success: false, message: 'Email này đã được sử dụng' });
 
-    const hash = await bcrypt.hash(password, 10);
+    // Rate limit: không cho gửi OTP liên tục (tối thiểu 1 phút)
+    const recentOtp = await pool.query(
+      `SELECT maotpreg FROM otp_register 
+       WHERE email = $1 AND loaitk = 'HV' AND ngaytao > NOW() - INTERVAL '1 minute' AND dasudung = FALSE`,
+      [email]
+    );
+    if (recentOtp.rows.length > 0) {
+      return res.json({ success: false, message: 'Vui lòng chờ 1 phút trước khi gửi lại mã OTP' });
+    }
+
+    // Tạo OTP 6 số
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = await bcrypt.hash(otp, 10);
+
+    // Hash mật khẩu để lưu tạm
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Lưu thông tin đăng ký tạm + OTP
+    const regData = JSON.stringify({ username, passwordHash, hoten, ngaysinh, sdt, email });
+    await pool.query(
+      `INSERT INTO otp_register (email, otphash, regdata, loaitk, hethan) 
+       VALUES ($1, $2, $3, 'HV', NOW() + INTERVAL '10 minutes')`,
+      [email, otpHash, regData]
+    );
+
+    // Gửi email OTP
+    const sent = await sendEmail({
+      to: email,
+      subject: '📧 Mã OTP Xác Minh Đăng Ký — GiaSưConnect',
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #f8fafc; border-radius: 12px;">
+          <h2 style="color: #0f172a; text-align: center; margin-bottom: 10px;">📧 Xác minh đăng ký tài khoản</h2>
+          <p style="color: #475569; text-align: center;">Xin chào <strong>${hoten}</strong>,</p>
+          <p style="color: #475569; text-align: center;">Mã OTP xác minh đăng ký của bạn là:</p>
+          <div style="text-align: center; margin: 20px 0;">
+            <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0f172a; background: #e2e8f0; padding: 12px 24px; border-radius: 8px; display: inline-block;">
+              ${otp}
+            </span>
+          </div>
+          <p style="color: #94a3b8; text-align: center; font-size: 14px;">
+            Mã này có hiệu lực trong <strong>10 phút</strong>.<br/>
+            Nếu bạn không yêu cầu đăng ký, vui lòng bỏ qua email này.
+          </p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+          <p style="color: #94a3b8; text-align: center; font-size: 12px;">GiaSưConnect — Hệ thống quản lý gia sư</p>
+        </div>
+      `
+    });
+
+    if (!sent) {
+      return res.json({ success: false, message: 'Không thể gửi email OTP. Vui lòng thử lại sau.' });
+    }
+
+    res.json({ success: true, requireOTP: true, email, message: 'Đã gửi mã OTP đến email của bạn. Vui lòng kiểm tra hộp thư.' });
+  } catch (e) { console.error(e); res.json({ success: false, message: 'Lỗi server: ' + e.message }); }
+});
+
+// Xác minh OTP đăng ký HV
+app.post('/api/auth/verify-register-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.json({ success: false, message: 'Thiếu email hoặc mã OTP' });
+
+    // Tìm OTP mới nhất, chưa hết hạn, chưa dùng
+    const otpResult = await pool.query(
+      `SELECT * FROM otp_register 
+       WHERE email = $1 AND loaitk = 'HV' AND hethan > NOW() AND dasudung = FALSE
+       ORDER BY ngaytao DESC LIMIT 1`,
+      [email]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.json({ success: false, message: 'Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng đăng ký lại.' });
+    }
+
+    const otpRecord = otpResult.rows[0];
+
+    // Kiểm tra số lần thử (tối đa 5)
+    if (otpRecord.solanthu >= 5) {
+      await pool.query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
+      return res.json({ success: false, message: 'Đã thử quá nhiều lần. Vui lòng đăng ký lại.' });
+    }
+
+    // So sánh OTP
+    const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otphash);
+    if (!isMatch) {
+      await pool.query('UPDATE otp_register SET solanthu = solanthu + 1 WHERE maotpreg = $1', [otpRecord.maotpreg]);
+      const remaining = 5 - (otpRecord.solanthu + 1);
+      return res.json({ success: false, message: `Mã OTP không đúng. Còn ${remaining} lần thử.` });
+    }
+
+    // OTP đúng → tạo tài khoản thật
+    const regData = otpRecord.regdata;
+    const { username, passwordHash, hoten, ngaysinh, sdt } = regData;
+
+    // Kiểm tra lại username chưa bị lấy
+    const existsCheck = await pool.query('SELECT matk FROM taikhoan WHERE tendangnhap = $1', [username]);
+    if (existsCheck.rows.length > 0) {
+      await pool.query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
+      return res.json({ success: false, message: 'Tên đăng nhập đã tồn tại. Vui lòng đăng ký lại với tên khác.' });
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const tkResult = await client.query(
         "INSERT INTO taikhoan (tendangnhap, matkhau, vaitro, email) VALUES ($1, $2, 'HV', $3) RETURNING matk",
-        [username, hash, email || null]
+        [username, passwordHash, email]
       );
       const matk = tkResult.rows[0].matk;
       await client.query(
         "INSERT INTO hocvien (matk, hoten, ngaysinh, sdt, email) VALUES ($1, $2, $3, $4, $5)",
-        [matk, hoten, ngaysinh, sdt, email || null]
+        [matk, hoten, ngaysinh, sdt, email]
       );
+      // Đánh dấu OTP đã dùng
+      await client.query('UPDATE otp_register SET dasudung = TRUE WHERE maotpreg = $1', [otpRecord.maotpreg]);
       await client.query('COMMIT');
-      res.json({ success: true, message: 'Đăng ký thành công' });
+      res.json({ success: true, message: 'Xác minh thành công! Tài khoản đã được tạo. Vui lòng đăng nhập.' });
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
   } catch (e) { console.error(e); res.json({ success: false, message: 'Lỗi server: ' + e.message }); }
@@ -250,6 +359,13 @@ app.use('/api/giasu', require('./routes/giasu'));
 app.use('/api/lop', require('./routes/lop'));
 app.use('/api/nhanvien', require('./routes/nhanvien'));
 app.use('/api/auth', require('./routes/auth'));
+
+// ============================================================
+// SPA FALLBACK — phục vụ index.html cho client-side routing
+// ============================================================
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+});
 
 // ============================================================
 // SEED DATA (tạo tài khoản mặc định)
